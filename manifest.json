@@ -1,0 +1,143 @@
+{
+  "dxt_version": "0.1",
+  "name": "@aipy-pro/device-block-agent",
+  "display_name": "设备联动封禁智能体",
+  "version": "0.1.0",
+  "description": "基于 FastMCP 的 AF 设备联动封禁智能体脚手架。",
+  "author": {
+    "name": "AiPy Team"
+  },
+  "icon": "assets/icon.svg",
+  "server": {
+    "type": "python",
+    "entry_point": "main.py",
+    "mcp_config": {
+      "command": "python",
+      "args": [
+        "${__dirname}/main.py"
+      ],
+      "env": {
+        "AF_HOST": "${user_config.af_host}",
+        "AF_NAMESPACE": "${user_config.af_namespace}",
+        "AF_USERNAME": "${user_config.af_username}",
+        "AF_PASSWORD": "${user_config.af_password}",
+        "AF_VERIFY_TLS": "${user_config.af_verify_tls}",
+        "CONFIRM_MODE": "${user_config.confirm_mode}",
+        "WHITELIST_FILE": "${user_config.whitelist_file}",
+        "LOG_FILE": "${user_config.log_file}",
+        "SESSION_FILE": "${user_config.session_file}",
+        "SESSION_TIMEOUT_SECONDS": "${user_config.session_timeout_seconds}",
+        "SESSION_REFRESH_WINDOW_SECONDS": "${user_config.session_refresh_window_seconds}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "agent_info",
+      "description": "返回当前智能体脚手架状态、传输方式和已规划工具范围。"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "addition-system-instruction",
+      "description": "向当前任务注入设备联动封禁智能体的补充系统提示词。",
+      "text": "你正在使用设备联动封禁智能体，请以助手对话方式工作。先判断用户是在提问、查询状态、还是要求执行处置动作。若只是解释概念、说明配置、比较方案或分析结果，优先直接回答，不要机械调用工具。若需要调用工具，先用一句自然语言说明你要检查什么或执行什么，再复用默认账号与连接配置；会话缺失或失效时，明确提示需要登录或补全配置。查询类请求应返回结构化但自然的结论，突出时间、对象、数量、状态和异常。写操作前必须检查白名单命中情况，并依据 confirm_mode 判断是否需要显式确认。对白名单目标、未授权目标、信息不完整目标或高风险清空类动作，必须拒绝直接执行或先要求确认。执行完成后，应说明是否执行成功、是否通过回检验证、仍存在哪些风险，以及用户接下来可以做什么。"
+    }
+  ],
+  "keywords": [
+    "conversation-tool"
+  ],
+  "user_config": {
+    "af_host": {
+      "type": "string",
+      "title": "AF 主机地址",
+      "description": "默认 AF 管理地址，可填写域名或 IP。",
+      "required": false,
+      "default": ""
+    },
+    "af_namespace": {
+      "type": "string",
+      "title": "AF 命名空间",
+      "description": "默认命名空间，未填写时使用 public。",
+      "required": false,
+      "default": "public"
+    },
+    "af_username": {
+      "type": "string",
+      "title": "AF 用户名",
+      "description": "默认登录用户名。",
+      "required": false,
+      "default": ""
+    },
+    "af_password": {
+      "type": "string",
+      "title": "AF 密码",
+      "description": "默认登录密码。",
+      "required": false,
+      "sensitive": true
+    },
+    "af_verify_tls": {
+      "type": "boolean",
+      "title": "校验证书",
+      "description": "是否默认校验 AF HTTPS 证书。",
+      "required": false,
+      "default": true
+    },
+    "confirm_mode": {
+      "type": "string",
+      "title": "确认模式",
+      "description": "manual 表示高风险批量操作需要显式确认，auto 表示默认自动执行。",
+      "required": true,
+      "default": "manual"
+    },
+    "whitelist_file": {
+      "type": "file",
+      "title": "白名单文件",
+      "description": "本地白名单 JSON 文件路径，命中后将阻断写操作。",
+      "required": true,
+      "default": "${__dirname}/examples/whitelist.sample.json"
+    },
+    "log_file": {
+      "type": "file",
+      "title": "审计日志文件",
+      "description": "本地 JSONL 审计日志输出路径。",
+      "required": false,
+      "default": "${__dirname}/logs/device-block-agent.jsonl"
+    },
+    "session_file": {
+      "type": "file",
+      "title": "会话存储文件",
+      "description": "本地 JSON 会话持久化文件路径，用于跨进程复用登录态。",
+      "required": false,
+      "default": "${__dirname}/data/sessions.json"
+    },
+    "session_timeout_seconds": {
+      "type": "number",
+      "title": "会话超时秒数",
+      "description": "本地会话超时阈值，默认 600 秒。",
+      "required": false,
+      "default": 600,
+      "min": 60,
+      "max": 86400
+    },
+    "session_refresh_window_seconds": {
+      "type": "number",
+      "title": "自动保活提前秒数",
+      "description": "距离本地过期阈值多少秒内自动触发 keepalive。",
+      "required": false,
+      "default": 120,
+      "min": 30,
+      "max": 3600
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "win32",
+      "darwin",
+      "linux"
+    ],
+    "runtimes": {
+      "python": ">=3.11,<4.0"
+    }
+  }
+}
