@@ -1,8 +1,11 @@
+import os
 from typing import Any
 
 from .account_config import get_account_defaults, resolve_connection_settings, resolve_login_settings, validate_connection_settings, validate_login_settings
 from .af_client import AFClientError, keepalive, login, logout
+from .app_config import DEFAULT_CONFIRM_MODE, DEFAULT_WHITELIST_FILE
 from .audit_log import append_audit_log
+from .risk_controls import GuardrailError, check_whitelist, describe_guardrails, persist_confirm_mode, persist_whitelist_file, resolve_confirm_mode, resolve_confirm_mode_file, resolve_whitelist_config_file, resolve_whitelist_file
 
 
 def _auth_error_result(action: str, error: AFClientError, context: dict[str, Any]) -> dict[str, Any]:
@@ -21,6 +24,16 @@ def _config_error_result(action: str, error: ValueError, context: dict[str, Any]
         "success": False,
         "message": str(error),
         "code": "config_error",
+        "data": None,
+    }
+
+
+def _guardrail_error_result(action: str, error: GuardrailError, context: dict[str, Any]) -> dict[str, Any]:
+    append_audit_log(action, {**context, "success": False, "message": str(error), "code": "guardrail_error"})
+    return {
+        "success": False,
+        "message": str(error),
+        "code": "guardrail_error",
         "data": None,
     }
 
@@ -109,3 +122,100 @@ def register_auth_tools(mcp: Any) -> None:
     )
     def account_config_status() -> dict[str, Any]:
         return get_account_defaults()
+
+    @mcp.tool(
+        name="get_confirm_mode",
+        description="返回当前有效的确认模式，用于判断高风险写操作按 manual 还是 auto 处理。",
+    )
+    def get_confirm_mode() -> dict[str, Any]:
+        mode = resolve_confirm_mode()
+        return {
+            "success": True,
+            "confirmMode": mode,
+            "source": "persisted" if os.path.exists(resolve_confirm_mode_file()) else ("environment" if os.getenv("CONFIRM_MODE") else "default"),
+            "confirmModeFile": resolve_confirm_mode_file(),
+            "persisted": os.path.exists(resolve_confirm_mode_file()),
+            "defaultConfirmMode": DEFAULT_CONFIRM_MODE,
+        }
+
+    @mcp.tool(
+        name="set_confirm_mode",
+        description="设置当前进程内全局确认模式，可切换为 auto 或 manual。",
+    )
+    def set_confirm_mode(mode: str) -> dict[str, Any]:
+        try:
+            normalized_mode = resolve_confirm_mode(mode)
+            os.environ["CONFIRM_MODE"] = normalized_mode
+            persistence = persist_confirm_mode(normalized_mode)
+            result = {
+                "success": True,
+                "confirmMode": normalized_mode,
+                "persisted": True,
+                "confirmModeFile": resolve_confirm_mode_file(),
+                "updatedAt": persistence["updatedAt"],
+                "message": f"确认模式已切换为 {normalized_mode}",
+            }
+            append_audit_log("set_confirm_mode", {"success": True, "confirmMode": normalized_mode, "result": result})
+            return result
+        except GuardrailError as error:
+            return _guardrail_error_result("set_confirm_mode", error, {"mode": mode})
+
+    @mcp.tool(
+        name="get_whitelist_config",
+        description="返回当前有效的白名单文件配置与规则统计。",
+    )
+    def get_whitelist_config() -> dict[str, Any]:
+        whitelist_file = resolve_whitelist_file()
+        guardrails = describe_guardrails()
+        return {
+            "success": True,
+            "whitelistFile": whitelist_file,
+            "source": "persisted" if os.path.exists(resolve_whitelist_config_file()) else ("environment" if os.getenv("WHITELIST_FILE") else "default"),
+            "whitelistConfigFile": resolve_whitelist_config_file(),
+            "persisted": os.path.exists(resolve_whitelist_config_file()),
+            "exists": guardrails["whitelistFileExists"],
+            "defaultWhitelistFile": DEFAULT_WHITELIST_FILE,
+            "ruleCount": guardrails["whitelistRuleCount"],
+        }
+
+    @mcp.tool(
+        name="set_whitelist_file",
+        description="设置当前全局白名单文件路径，并持久化到本地配置文件。",
+    )
+    def set_whitelist_file(whitelist_file: str) -> dict[str, Any]:
+        try:
+            normalized_file = whitelist_file.strip()
+            if not normalized_file:
+                raise GuardrailError("whitelist_file 不能为空")
+            os.environ["WHITELIST_FILE"] = normalized_file
+            persistence = persist_whitelist_file(normalized_file)
+            result = {
+                "success": True,
+                "whitelistFile": normalized_file,
+                "persisted": True,
+                "exists": os.path.exists(normalized_file),
+                "whitelistConfigFile": resolve_whitelist_config_file(),
+                "updatedAt": persistence["updatedAt"],
+                "message": f"白名单文件已切换为 {normalized_file}",
+            }
+            append_audit_log("set_whitelist_file", {"success": True, "whitelistFile": normalized_file, "result": result})
+            return result
+        except GuardrailError as error:
+            return _guardrail_error_result("set_whitelist_file", error, {"whitelist_file": whitelist_file})
+
+    @mcp.tool(
+        name="check_whitelist_targets",
+        description="检查一组目标是否命中当前白名单规则。",
+    )
+    def check_whitelist_targets(targets: list[str], whitelist_file: str | None = None) -> dict[str, Any]:
+        try:
+            result = check_whitelist(targets, whitelist_file=whitelist_file)
+            return {
+                "success": True,
+                "allowed": result["allowed"],
+                "matches": result["matches"],
+                "checkedTargets": result["checkedTargets"],
+                "whitelistFile": result["whitelistFile"],
+            }
+        except GuardrailError as error:
+            return _guardrail_error_result("check_whitelist_targets", error, {"targets": targets, "whitelist_file": whitelist_file})

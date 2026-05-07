@@ -4,13 +4,11 @@
 
 当前已整理的能力包括：
 
+- 例外封锁配置
 - 用户登录
 - 用户注销
 - token 保活
-- 账户密码安全策略
-- 当前已登录管理员账户权限查询
-- 3A 认证配置
-- 封锁攻击者
+- 封锁攻击者查询与维护
 - 临时封锁 IP
 - 业务封锁 IP
 - 自动封锁时间配置
@@ -24,11 +22,14 @@
 | 认证鉴权 | POST | /api/v1/namespaces/@namespace/login | 用户登录 |
 | 认证鉴权 | POST | /api/v1/namespaces/@namespace/logout | 用户注销 |
 | 认证鉴权 | GET | /api/v1/namespaces/@namespace/keepalive | token 保活 |
-| 密码策略 | GET | /api/v1/namespaces/@namespace/accountpasswdpolicy | 获取账户密码安全策略 |
-| 密码策略 | PATCH | /api/v1/namespaces/@namespace/accountpasswdpolicy | 修改账户密码安全策略 |
-| 当前登录账户 | GET | /api/v1/namespaces/@namespace/accountpermissions/@name | 查询当前已登录管理员账户权限 |
-| 3A 认证 | GET | /api/v1/namespaces/@namespace/aaacertification | 获取 3A 认证信息 |
-| 3A 认证 | PUT | /api/v1/namespaces/@namespace/aaacertification | 修改 3A 认证信息 |
+| 例外封锁 | POST | /api/batch/v1/namespaces/@namespace/blockip/excludeblockips | 批量添加例外封锁 |
+| 例外封锁 | POST | /api/batch/v1/namespaces/@namespace/blockip/excludeblockip?_method=delete | 批量删除例外封锁 |
+| 例外封锁 | PATCH | /api/batch/v1/namespaces/@namespace/blockip/excludeblockip | 批量修改例外封锁 |
+| 例外封锁 | GET | /api/v1/namespaces/@namespace/blockip/excludeblockip | 获取所有例外封锁配置 |
+| 例外封锁 | PATCH | /api/v1/namespaces/@namespace/blockip/excludeblockip | 修改单项例外 |
+| 封锁攻击者 | GET | /api/v1/namespaces/@namespace/blockip | 获取封锁攻击者 IP 列表 |
+| 封锁攻击者 | POST | /api/batch/v1/namespaces/@namespace/blockip | 批量添加封锁攻击者 |
+| 封锁攻击者 | POST | /api/batch/v1/namespaces/@namespace/blockip?_method=delete | 批量删除封锁攻击者 |
 | 封锁攻击者 | DELETE | /api/v1/namespaces/@namespace/blockipclear | 清空封锁攻击者 |
 | 自动封锁时间 | PATCH | /api/v1/namespaces/@namespace/blockiptime | 全量修改自动封锁攻击者时间 |
 | 自动封锁时间 | GET | /api/v1/namespaces/@namespace/blockiptime | 获取自动封锁攻击者时间 |
@@ -113,13 +114,314 @@ Cookie: token=E1CC915441E1323D1D871713251AE5A88C87CE13142F9D0D9548E7441ADA215
 | enableLog | 是否有日志详情 |
 | scope | 封锁范围，常见值：GLOBAL、BUSINESS |
 
-## 3. 封锁攻击者相关接口
+## 3. 例外封锁与封锁攻击者相关接口
 
-### 3.1 清空封锁攻击者
+### 3.1 批量添加例外封锁
+
+- 方法：POST
+- 路径：/api/batch/v1/namespaces/@namespace/blockip/excludeblockips
+- 说明：批量添加例外封锁，PDF 标注虚拟系统不支持该 API
+
+请求字段：
+
+| 字段 | 必选 | 说明 |
+| --- | --- | --- |
+| description | 是 | 例外封锁描述，最长 95 字符 |
+| ipAddr.start | 是 | IP 范围起始地址 |
+| ipAddr.end | 否 | IP 范围结束地址 |
+| ipAddr.bits | 否 | CIDR 掩码简写 |
+| ipName | 否 | 例外封锁名称 |
+| addTime | 否 | 例外封锁添加时间 |
+| enable | 否 | 例外封锁启用状态，默认 true |
+
+请求体示例：
+
+```json
+[
+  {
+    "description": "",
+    "ipAddr": {
+      "start": "192.168.1.1"
+    },
+    "enable": true,
+    "ipName": "test",
+    "addTime": "test"
+  }
+]
+```
+
+示例返回：
+
+```json
+{
+  "code": 0,
+  "message": "",
+  "data": [
+    {
+      "description": "",
+      "ipAddr": {
+        "start": "192.168.1.1"
+      },
+      "enable": true,
+      "ipName": "test",
+      "addTime": "test"
+    }
+  ]
+}
+```
+
+### 3.2 批量删除例外封锁
+
+- 方法：POST
+- 路径：/api/batch/v1/namespaces/@namespace/blockip/excludeblockip?_method=delete
+- 说明：批量删除例外封锁，PDF 标注虚拟系统不支持该 API
+
+请求体与返回体字段与“批量添加例外封锁”一致。
+
+### 3.3 批量修改例外封锁
+
+- 方法：PATCH
+- 路径：/api/batch/v1/namespaces/@namespace/blockip/excludeblockip
+- 说明：批量修改例外封锁，PDF 标注虚拟系统不支持该 API
+
+查询参数：
+
+| 参数 | 必选 | 说明 |
+| --- | --- | --- |
+| _key | 否 | 目标位置关键字，可选 position 或 name |
+| _where | 否 | 指定位置，可选 top、bottom、before、after |
+| _dest | 否 | 目标位置关键字对应的值 |
+
+请求体字段与“批量添加例外封锁”一致，返回 data 为例外封锁组数组。
+
+### 3.4 获取所有例外封锁配置
+
+- 方法：GET
+- 路径：/api/v1/namespaces/@namespace/blockip/excludeblockip
+- 说明：获取所有例外封锁配置，PDF 标注虚拟系统不支持该 API
+
+查询参数：
+
+| 参数 | 必选 | 说明 |
+| --- | --- | --- |
+| _sortby | 否 | 指定排序字段 |
+| _order | 否 | 排序方式，asc 或 desc |
+| _start | 否 | 起始位置，从 0 开始 |
+| _select | 否 | 选择字段，多个字段用逗号分隔 |
+| _search | 否 | 模糊搜索关键字 |
+| _length | 否 | 返回条数，最大 200，默认 100 |
+
+返回结构：
+
+| 字段 | 含义 |
+| --- | --- |
+| data.totalItems | 总项目数 |
+| data.totalPages | 总页数 |
+| data.pageNumber | 当前页码 |
+| data.pageSize | 每页大小 |
+| data.itemsOffset | 当前条目偏移 |
+| data.itemLength | 当前页数据条数 |
+| data.privateOffset | 内部偏移 |
+| data.items[].description | 例外封锁描述 |
+| data.items[].ipAddr.start | IP 范围起始地址 |
+| data.items[].ipAddr.end | IP 范围结束地址 |
+| data.items[].ipAddr.bits | CIDR 掩码简写 |
+| data.items[].ipName | 例外封锁名称 |
+| data.items[].addTime | 例外封锁添加时间 |
+| data.items[].enable | 例外封锁是否启用 |
+
+### 3.5 修改单项例外
+
+- 方法：PATCH
+- 路径：/api/v1/namespaces/@namespace/blockip/excludeblockip
+- 说明：修改单项例外，PDF 标注虚拟系统不支持该 API
+
+查询参数：
+
+| 参数 | 必选 | 说明 |
+| --- | --- | --- |
+| _key | 否 | 目标位置关键字，可选 position 或 name |
+| ipName | 否 | 例外封锁名称 |
+| _where | 否 | 指定位置，可选 top、bottom、before、after |
+| _dest | 否 | 目标位置关键字对应的值 |
+
+请求体字段与“批量添加例外封锁”一致，返回 data 为单个例外封锁对象。
+
+### 3.6 获取封锁攻击者 IP 列表
+
+- 方法：GET
+- 路径：/api/v1/namespaces/@namespace/blockip
+- 说明：获取封锁攻击者 IP 列表，PDF 标注虚拟系统不支持该 API
+
+查询参数：
+
+| 参数 | 必选 | 说明 |
+| --- | --- | --- |
+| creator | 否 | 限制访问身份，默认 AF，可选 SIP 或 AF |
+| _order | 否 | 排序方式，asc 或 desc |
+| _start | 否 | 起始位置，从 0 开始 |
+| _length | 否 | 返回条数，最大 200，默认 100 |
+| _search | 否 | 模糊搜索关键字 |
+| _sortby | 否 | 指定排序字段 |
+
+返回结构：
+
+| 字段 | 含义 |
+| --- | --- |
+| data.totalItems | 总项目数 |
+| data.totalPages | 总页数 |
+| data.pageNumber | 当前页码 |
+| data.pageSize | 每页大小 |
+| data.itemsOffset | 当前条目偏移 |
+| data.itemLength | 当前页数据条数 |
+| data.items[].blockType | 封锁类型，常见值 SRC、DST、DNS、URL、IP |
+| data.items[].blockAddr | 被封锁地址 |
+| data.items[].srcIP | 源 IP |
+| data.items[].dstIP | 目的 IP |
+| data.items[].dns | 域名 |
+| data.items[].url | URL |
+| data.items[].dstPort | 目的端口 |
+| data.items[].blockTime | 封锁时间 |
+| data.items[].deblockTime | 剩余封锁时间 |
+| data.items[].module | 触发封锁的安全模块 |
+| data.items[].attack | 触发封锁的攻击类型 |
+| data.items[].policyId | 触发封锁的策略 ID |
+| data.items[].policy | 触发封锁的策略名称 |
+| data.items[].enableLog | 是否有日志详情 |
+| data.items[].scope | 封锁范围，常见值 GLOBAL、BUSINESS |
+
+示例返回：
+
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "totalItems": 1,
+    "itemsOffset": 0,
+    "itemLength": 1,
+    "pageSize": 100,
+    "items": [
+      {
+        "attack": "NULL",
+        "blockTimeLen": 4320,
+        "blockScope": "global",
+        "blockAddr": "192.168.1.1",
+        "dstIP": "0.0.0.0",
+        "blockType": "src_ip",
+        "enableLog": false,
+        "dstPort": 0,
+        "module": "手动添加规则",
+        "blockTime": "2020-11-25 15:54:05",
+        "policy": "",
+        "deblockTime": "71:59:53",
+        "srcIP": "192.168.1.1"
+      }
+    ],
+    "totalPages": 1,
+    "pageNumber": 1
+  }
+}
+```
+
+### 3.7 批量添加封锁攻击者
+
+- 方法：POST
+- 路径：/api/batch/v1/namespaces/@namespace/blockip
+- 说明：批量添加封锁攻击者，PDF 标注虚拟系统不支持该 API
+
+查询参数：
+
+| 参数 | 必选 | 说明 |
+| --- | --- | --- |
+| creator | 否 | 限制访问身份，默认 AF，可选 SIP 或 AF |
+| aifwType | 否 | 仅 creator=SIP 时生效，默认 MANUAL，可选 AUTO 或 MANUAL |
+| override | 否 | 冲突类型，文档给出的枚举值为 PROMPTALL |
+
+请求字段：
+
+| 字段 | 必选 | 说明 |
+| --- | --- | --- |
+| ipType | 否 | 封锁类型，可选 SRC、DST、DNS、URL，默认 SRC |
+| srcIP | 否 | 源 IP 列表，ipType=SRC 时生效 |
+| dstIP | 否 | 目的 IP 列表，ipType=DST 时生效 |
+| dstPort | 否 | 目的端口 |
+| url | 否 | URL 列表 |
+| dns | 否 | 域名列表 |
+| attack | 否 | 攻击类型 |
+| blockTime | 否 | 封锁时长，支持 m/h/d |
+| result.blockUrl | 否 | URL |
+| result.blockRes | 否 | 封锁结果 |
+| result.blockMsg | 否 | 信息 |
+
+返回字段补充：
+
+| 字段 | 含义 |
+| --- | --- |
+| data.conflictNum | 与全局黑名单或白名单 IP 冲突的数量 |
+| data.conflictItem | 与全局黑名单或白名单 IP 冲突的列表 |
+
+请求体示例：
+
+```json
+{
+  "ipType": "SRC",
+  "blockTime": "3d",
+  "srcIP": [
+    "192.168.1.2",
+    "192.168.1.3"
+  ]
+}
+```
+
+### 3.8 批量删除封锁攻击者
+
+- 方法：POST
+- 路径：/api/batch/v1/namespaces/@namespace/blockip?_method=delete
+- 说明：批量删除封锁攻击者，PDF 标注虚拟系统不支持该 API
+
+查询参数：
+
+| 参数 | 必选 | 说明 |
+| --- | --- | --- |
+| creator | 否 | 限制访问身份，默认 AF，可选 SIP 或 AF |
+
+请求字段：
+
+| 字段 | 必选 | 说明 |
+| --- | --- | --- |
+| srcIP | 否 | 源 IP |
+| dstIP | 否 | 目的 IP |
+| dstPort | 否 | 目的端口 |
+| dns | 否 | 域名 |
+| url | 否 | URL |
+| attack | 否 | 触发封锁的攻击类型 |
+| scope | 否 | 封锁范围，可选 GLOBAL 或 BUSINESS |
+
+示例请求体：
+
+```json
+[
+  {
+    "attack": "PLT-MANUAL",
+    "srcIP": "192.168.1.1"
+  },
+  {
+    "attack": "PLT-MANUAL",
+    "srcIP": "192.168.1.2"
+  },
+  {
+    "attack": "PLT-MANUAL",
+    "srcIP": "192.168.1.3"
+  }
+]
+```
+
+### 3.9 清空封锁攻击者
 
 - 方法：DELETE
 - 路径：/api/v1/namespaces/@namespace/blockipclear
-- 说明：清空当前命名空间下的封锁攻击者记录
+- 说明：清空当前命名空间下的封锁攻击者记录，PDF 标注虚拟系统不支持该 API
 
 请求参数：
 
@@ -133,13 +435,13 @@ Cookie: token=E1CC915441E1323D1D871713251AE5A88C87CE13142F9D0D9548E7441ADA215
 DELETE https://192.168.1.1/api/v1/namespaces/public/blockipclear
 ```
 
-返回 data 为被清空的封锁攻击者列表。
+返回 data 为被清空的封锁攻击者列表，字段与封锁明细列表类似，包括 blockType、blockAddr、srcIP、dstIP、dns、url、dstPort、blockTime、deblockTime、module、attack、policyId、policy、enableLog、scope 等。
 
-### 3.2 全量修改自动封锁攻击者时间
+### 3.10 全量修改自动封锁攻击者时间
 
 - 方法：PATCH
 - 路径：/api/v1/namespaces/@namespace/blockiptime
-- 说明：设置自动封锁攻击者时间
+- 说明：设置自动封锁攻击者时间，PDF 标注虚拟系统不支持该 API
 
 请求体：
 
@@ -157,11 +459,11 @@ DELETE https://192.168.1.1/api/v1/namespaces/public/blockipclear
 | minutes | 否 | 分钟数，自动生成 |
 | bruteBlockTime | 否 | 暴力破解封锁时间，单位 d |
 
-### 3.3 获取自动封锁攻击者时间
+### 3.11 获取自动封锁攻击者时间
 
 - 方法：GET
 - 路径：/api/v1/namespaces/@namespace/blockiptime
-- 说明：获取当前自动封锁攻击者时间配置
+- 说明：获取当前自动封锁攻击者时间配置，PDF 标注虚拟系统不支持该 API
 
 示例返回：
 
@@ -177,11 +479,11 @@ DELETE https://192.168.1.1/api/v1/namespaces/public/blockipclear
 }
 ```
 
-### 3.4 获取封锁攻击者数量
+### 3.12 获取封锁攻击者数量
 
 - 方法：GET
 - 路径：/api/v1/namespaces/@namespace/blocktotalcnt
-- 说明：返回当前封锁总条数
+- 说明：返回当前封锁总条数，PDF 标注虚拟系统不支持该 API
 
 示例返回：
 
@@ -400,8 +702,8 @@ GET https://192.168.1.1/api/v1/namespaces/public/wrapper/blockip
 
 | 字段 | 必选 | 含义 |
 | --- | --- | --- |
-| name | 是 | 账户名 |
-| password | 是 | 密码 |
+| name | 是 | 账户名，最短 1 字符，最长 60 字符 |
+| password | 是 | 密码，最短 1 字符，最长 512 字符 |
 
 关键返回字段：
 
@@ -410,7 +712,7 @@ GET https://192.168.1.1/api/v1/namespaces/public/wrapper/blockip
 | data.name | 执行操作的管理员账户名 |
 | data.loginResult.token | 登录后得到的会话令牌 |
 | data.passwdStatus | 密码状态，是否过期或需要修改 |
-| data.authResult | 认证结果 |
+| data.authResult | 认证结果，常见值 LOCAL 或 REMOTE |
 | data.role | 账户角色 |
 | data.cftoken | 防跨站请求伪造的会话令牌 |
 | data.namespace | 账号所属系统标识 |
@@ -459,15 +761,29 @@ POST https://192.168.1.1/api/v1/namespaces/public/logout
 | 字段 | 含义 |
 | --- | --- |
 | data.name | 执行操作的管理员账户名 |
-| data.authResult | 认证结果 |
+| data.authResult | 认证结果，常见值 LOCAL 或 REMOTE |
 | data.cftoken | 防跨站请求伪造的会话令牌 |
 | data.namespace | 账号所属系统标识 |
+
+示例返回：
+
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "name": "admin"
+  }
+}
+```
 
 ### 7.3 token 保活
 
 - 方法：GET
 - 路径：/api/v1/namespaces/@namespace/keepalive
 - 说明：刷新 token 时间戳，保持 token 不超时
+
+返回 data 类型为 int32，常见成功返回值为 0。
 
 示例：
 
@@ -485,204 +801,7 @@ GET https://192.168.1.1/api/v1/namespaces/public/keepalive
 }
 ```
 
-## 8. 账户密码安全策略
-
-### 8.1 获取账户密码安全策略
-
-- 方法：GET
-- 路径：/api/v1/namespaces/@namespace/accountpasswdpolicy
-- 说明：查询当前命名空间下的账户密码安全策略
-
-示例：
-
-```http
-GET https://192.168.1.1/api/v1/namespaces/public/accountpasswdpolicy
-```
-
-示例返回：
-
-```json
-{
-  "code": 0,
-  "message": "成功",
-  "data": {
-    "changeInitialPasswd": false,
-    "passwdExpiredChange": false,
-    "passwdValidity": 30
-  }
-}
-```
-
-返回字段：
-
-| 字段 | 含义 |
-| --- | --- |
-| changeInitialPasswd | 下次登录是否需要修改密码 |
-| passwdExpiredChange | 密码过期后是否需要修改密码 |
-| passwdValidity | 密码有效期，单位天 |
-
-### 8.2 修改账户密码安全策略
-
-- 方法：PATCH
-- 路径：/api/v1/namespaces/@namespace/accountpasswdpolicy
-- 说明：修改账户密码安全策略
-
-请求体示例：
-
-```json
-{
-  "changeInitialPasswd": false,
-  "passwdExpiredChange": true,
-  "passwdValidity": 15
-}
-```
-
-请求字段：
-
-| 字段 | 必选 | 含义 |
-| --- | --- | --- |
-| changeInitialPasswd | 否 | 下次登录是否需要修改密码 |
-| passwdExpiredChange | 否 | 密码过期后是否需要修改密码 |
-| passwdValidity | 是 | 密码有效期 |
-
-## 9. 当前已登录管理员账户权限
-
-### 9.1 查询当前已登录管理员账户权限
-
-- 方法：GET
-- 路径：/api/v1/namespaces/@namespace/accountpermissions/@name
-- 说明：查询当前已登录管理员账户权限信息
-
-示例：
-
-```http
-GET https://192.168.1.1/api/v1/namespaces/public/accountpermissions/admin
-```
-
-关键返回字段：
-
-| 字段 | 含义 |
-| --- | --- |
-| name | 用户名 |
-| uuid | 账户唯一标识 |
-| enable | 账户状态 |
-| description | 描述 |
-| roleName | 账户角色 |
-| authType | 认证类型 |
-| authentication.usbKeyEnable | 是否启用 USB Key 认证 |
-| authentication.fingerprintEnable | 是否启用指纹校验 |
-| authentication.manageMode | 管理方式 |
-| modulePermissions | 模块权限列表 |
-
-常见枚举：
-
-#### roleName
-
-- ADMINISTRATOR：超级管理员
-- COMMON：普通管理员
-- SAFE：安全管理员
-- LOG：审计员
-- SYSTEM：系统管理员
-
-#### authType
-
-- LOCAL：仅本地认证
-- REMOTE：仅外部服务器认证
-- REMOTE_OR_LOCAL：优先外部认证，失败时回退到本地认证
-
-#### manageMode
-
-- WEBCONSOLE：Web 管理界面
-- APIINTERFACE：API 接口
-- COMMANDLINE：命令行
-
-## 10. 3A 认证配置
-
-### 10.1 获取 3A 认证信息
-
-- 方法：GET
-- 路径：/api/v1/namespaces/@namespace/aaacertification
-- 说明：获取当前 3A 认证配置
-
-示例：
-
-```http
-GET https://192.168.1.1/api/v1/namespaces/public/aaacertification
-```
-
-示例返回：
-
-```json
-{
-  "code": 0,
-  "message": "",
-  "data": {
-    "allowRemoteAccess": true,
-    "enable": true,
-    "basic": {
-      "sharekey": "test",
-      "ip": "192.168.1.1",
-      "protocol": "eap",
-      "port": 0
-    },
-    "aaatype": "radius",
-    "name": "admin"
-  }
-}
-```
-
-### 10.2 修改 3A 认证信息
-
-- 方法：PUT
-- 路径：/api/v1/namespaces/@namespace/aaacertification
-- 说明：修改当前 3A 认证配置
-
-请求体示例：
-
-```json
-{
-  "allowRemoteAccess": true,
-  "enable": true,
-  "basic": {
-    "sharekey": "test",
-    "ip": "192.168.1.1",
-    "protocol": "eap",
-    "port": 0
-  },
-  "aaatype": "radius",
-  "name": "admin"
-}
-```
-
-请求字段：
-
-| 字段 | 必选 | 含义 |
-| --- | --- | --- |
-| enable | 否 | 3A 认证开关 |
-| name | 否 | 外部认证服务器名称 |
-| aaatype | 否 | 3A 认证方式 |
-| allowRemoteAccess | 否 | 是否允许远程管理员接入 |
-| basic.ip | 否 | 认证服务器 IP |
-| basic.port | 否 | 认证端口 |
-| basic.sharekey | 否 | 共享秘钥 |
-| basic.protocol | 否 | 采用协议 |
-
-相关枚举：
-
-#### aaatype
-
-- tacacs：TACACS 认证
-- radius：RADIUS 认证
-
-#### basic.protocol
-
-- pap：PAP
-- ask：质询握手身份验证协议
-- chap：Microsoft CHAP
-- chap2：Microsoft CHAP2
-- eap：EAP_MD5
-
-## 11. 认证相关返回码
+## 8. 认证相关返回码
 
 从附录中可确认以下与认证直接相关的返回码：
 
@@ -694,7 +813,7 @@ GET https://192.168.1.1/api/v1/namespaces/public/aaacertification
 | 1010 | 密码过期 |
 | 1012 | 登录状态过期 |
 
-## 12. 来源定位
+## 9. 来源定位
 
 以上内容整理自 AF8.0.106-API中文文档.pdf 的以下章节：
 
@@ -703,11 +822,14 @@ GET https://192.168.1.1/api/v1/namespaces/public/aaacertification
 - 2.1 用户登录
 - 2.2 用户注销
 - 2.3 token保活
-- 7.2.10 获取账户密码安全策略
-- 7.2.11 修改账户密码安全策略
-- 7.2.12 查询当前已登录管理员账户权限
-- 7.2.13 获取 3A 认证信息
-- 7.2.14 修改 3A 认证信息
+- 8.3.1.1 批量添加例外封锁
+- 8.3.1.2 批量删除例外封锁
+- 8.3.1.3 批量修改例外封锁
+- 8.3.1.4 获取所有例外封锁配置
+- 8.3.1.5 修改单项例外
+- 8.3.2 获取封锁攻击者IP列表
+- 8.3.3 批量添加封锁攻击者
+- 8.3.4 批量删除封锁攻击者
 - 8.3.5 清空封锁攻击者
 - 8.3.6 全量修改自动封锁攻击者时间
 - 8.3.7 获取自动封锁攻击者时间

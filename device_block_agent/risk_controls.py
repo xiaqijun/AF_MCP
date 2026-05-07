@@ -1,10 +1,11 @@
 import ipaddress
 import json
 import os
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Any
 
-from .app_config import ALWAYS_CONFIRM_ACTIONS, BATCH_CONFIRM_ACTIONS, DEFAULT_CONFIRM_MODE, DEFAULT_WHITELIST_FILE
+from .app_config import ALWAYS_CONFIRM_ACTIONS, BATCH_CONFIRM_ACTIONS, DEFAULT_CONFIRM_MODE, DEFAULT_CONFIRM_MODE_FILE, DEFAULT_WHITELIST_CONFIG_FILE, DEFAULT_WHITELIST_FILE, WRITE_ACTIONS
 
 
 class GuardrailError(Exception):
@@ -18,15 +19,115 @@ class WhitelistMatch:
     reason: str
 
 
-def resolve_confirm_mode(confirm_mode: str | None = None) -> str:
-    value = (confirm_mode or os.getenv("CONFIRM_MODE") or DEFAULT_CONFIRM_MODE).strip().lower()
-    if value not in {"auto", "manual"}:
+def resolve_confirm_mode_file() -> str:
+    return (os.getenv("CONFIRM_MODE_FILE") or DEFAULT_CONFIRM_MODE_FILE).strip()
+
+
+def resolve_whitelist_config_file() -> str:
+    return (os.getenv("WHITELIST_CONFIG_FILE") or DEFAULT_WHITELIST_CONFIG_FILE).strip()
+
+
+def _load_persisted_confirm_mode() -> str | None:
+    file_path = resolve_confirm_mode_file()
+    if not file_path or not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get("confirmMode")
+    if not isinstance(value, str):
+        return None
+    normalized_value = value.strip().lower()
+    if normalized_value not in {"auto", "manual"}:
+        return None
+    return normalized_value
+
+
+def persist_confirm_mode(confirm_mode: str) -> dict[str, Any]:
+    normalized_mode = _normalize_confirm_mode(confirm_mode)
+    file_path = resolve_confirm_mode_file()
+    if not file_path:
+        raise GuardrailError("未配置 confirm_mode 持久化文件路径")
+    directory = os.path.dirname(file_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    payload = {
+        "confirmMode": normalized_mode,
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    with open(file_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+    return payload
+
+
+def _load_persisted_whitelist_file() -> str | None:
+    file_path = resolve_whitelist_config_file()
+    if not file_path or not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get("whitelistFile")
+    if not isinstance(value, str):
+        return None
+    normalized_value = value.strip()
+    return normalized_value or None
+
+
+def persist_whitelist_file(whitelist_file: str) -> dict[str, Any]:
+    normalized_file = whitelist_file.strip()
+    if not normalized_file:
+        raise GuardrailError("whitelist_file 不能为空")
+    file_path = resolve_whitelist_config_file()
+    if not file_path:
+        raise GuardrailError("未配置 whitelist 持久化文件路径")
+    directory = os.path.dirname(file_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    payload = {
+        "whitelistFile": normalized_file,
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    with open(file_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+    return payload
+
+
+def _normalize_confirm_mode(value: str) -> str:
+    normalized_value = value.strip().lower()
+    if normalized_value not in {"auto", "manual"}:
         raise GuardrailError("confirm_mode 仅支持 auto 或 manual")
-    return value
+    return normalized_value
+
+
+def resolve_confirm_mode(confirm_mode: str | None = None) -> str:
+    if confirm_mode is not None:
+        return _normalize_confirm_mode(confirm_mode)
+    persisted_mode = _load_persisted_confirm_mode()
+    if persisted_mode is not None:
+        return persisted_mode
+    env_mode = os.getenv("CONFIRM_MODE")
+    if env_mode:
+        return _normalize_confirm_mode(env_mode)
+    return DEFAULT_CONFIRM_MODE
 
 
 def resolve_whitelist_file(whitelist_file: str | None = None) -> str:
-    return (whitelist_file or os.getenv("WHITELIST_FILE") or DEFAULT_WHITELIST_FILE).strip()
+    explicit_file = whitelist_file.strip() if isinstance(whitelist_file, str) else ""
+    if explicit_file:
+        return explicit_file
+    persisted_file = _load_persisted_whitelist_file()
+    if persisted_file:
+        return persisted_file
+    return (os.getenv("WHITELIST_FILE") or DEFAULT_WHITELIST_FILE).strip()
 
 
 def _load_raw_rules(whitelist_file: str | None = None) -> list[dict[str, Any]]:
@@ -103,15 +204,15 @@ def check_confirmation(
     requires_confirm = False
     reason = ""
 
-    if normalized_action in ALWAYS_CONFIRM_ACTIONS:
+    if normalized_action in WRITE_ACTIONS and mode == "manual":
+        requires_confirm = True
+        reason = "当前处于 manual 模式，所有写操作都必须显式确认"
+    elif normalized_action in ALWAYS_CONFIRM_ACTIONS:
         requires_confirm = True
         reason = "清空类操作必须显式确认"
-    elif normalized_action in BATCH_CONFIRM_ACTIONS and mode == "manual":
+    elif normalized_action in BATCH_CONFIRM_ACTIONS and mode == "auto":
         requires_confirm = True
-        reason = "当前处于 manual 模式，批量高风险操作必须显式确认"
-    elif normalized_action in BATCH_CONFIRM_ACTIONS and target_count > 10:
-        requires_confirm = True
-        reason = "批量目标超过 10 条，必须显式确认"
+        reason = "当前处于 auto 模式，高风险写操作必须显式确认"
 
     if requires_confirm and not confirm:
         return {
@@ -132,11 +233,22 @@ def check_confirmation(
 def describe_guardrails() -> dict[str, Any]:
     whitelist_file = resolve_whitelist_file()
     rules = _load_raw_rules(whitelist_file)
+    confirm_mode_file = resolve_confirm_mode_file()
+    persisted_mode = _load_persisted_confirm_mode()
+    whitelist_config_file = resolve_whitelist_config_file()
+    persisted_whitelist_file = _load_persisted_whitelist_file()
     return {
         "confirmMode": resolve_confirm_mode(),
+        "confirmModeSource": "persisted" if persisted_mode else ("environment" if os.getenv("CONFIRM_MODE") else "default"),
+        "confirmModeFile": confirm_mode_file,
+        "confirmModeFileExists": os.path.exists(confirm_mode_file),
         "whitelistFile": whitelist_file,
+        "whitelistSource": "persisted" if persisted_whitelist_file else ("environment" if os.getenv("WHITELIST_FILE") else "default"),
+        "whitelistConfigFile": whitelist_config_file,
+        "whitelistConfigFileExists": os.path.exists(whitelist_config_file),
         "whitelistFileExists": os.path.exists(whitelist_file),
         "whitelistRuleCount": len(rules),
+        "writeActions": sorted(WRITE_ACTIONS),
         "alwaysConfirmActions": sorted(ALWAYS_CONFIRM_ACTIONS),
         "batchConfirmActions": sorted(BATCH_CONFIRM_ACTIONS),
     }

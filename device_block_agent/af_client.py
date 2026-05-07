@@ -366,6 +366,7 @@ def _query_params(
     sortby: str | None = None,
     order: str | None = None,
     creator: str | None = None,
+    select: str | None = None,
 ) -> dict[str, Any]:
     params: dict[str, Any] = {}
     if creator:
@@ -376,6 +377,8 @@ def _query_params(
         params["_length"] = length
     if search:
         params["_search"] = search
+    if select:
+        params["_select"] = select
     if sortby:
         params["_sortby"] = sortby
     if order:
@@ -634,4 +637,206 @@ def set_block_time(
         "message": result.get("message", "成功"),
         "data": result.get("data"),
         "request": payload,
+    }
+
+
+def list_exception_blocks(
+    host: str,
+    namespace: str,
+    *,
+    start: int | None = None,
+    length: int | None = None,
+    search: str | None = None,
+    select: str | None = None,
+    sortby: str | None = None,
+    order: str | None = None,
+    verify_tls: bool = True,
+) -> dict[str, Any]:
+    session = get_active_session(host, namespace, verify_tls=verify_tls, auto_refresh=True)
+    url = build_url(
+        session.host,
+        session.namespace,
+        "/api/v1/namespaces/@namespace/blockip/excludeblockip",
+        query=_query_params(start=start, length=length, search=search, select=select, sortby=sortby, order=order),
+    )
+    result = request_json("GET", url, token=session.token, verify_tls=verify_tls)
+    _mark_session_active(session)
+    return result.get("data") or {}
+
+
+def add_exception_blocks(
+    host: str,
+    namespace: str,
+    *,
+    records: list[dict[str, Any]],
+    verify_tls: bool = True,
+) -> dict[str, Any]:
+    session = get_active_session(host, namespace, verify_tls=verify_tls, auto_refresh=True)
+    url = build_url(
+        session.host,
+        session.namespace,
+        "/api/batch/v1/namespaces/@namespace/blockip/excludeblockips",
+    )
+    result = request_json("POST", url, payload=records, token=session.token, verify_tls=verify_tls)
+    _mark_session_active(session)
+    return {
+        "success": True,
+        "message": result.get("message", "成功"),
+        "data": result.get("data"),
+        "requestCount": len(records),
+    }
+
+
+def delete_exception_blocks(
+    host: str,
+    namespace: str,
+    *,
+    records: list[dict[str, Any]],
+    verify_tls: bool = True,
+) -> dict[str, Any]:
+    session = get_active_session(host, namespace, verify_tls=verify_tls, auto_refresh=True)
+    url = build_url(
+        session.host,
+        session.namespace,
+        "/api/batch/v1/namespaces/@namespace/blockip/excludeblockip",
+        query={"_method": "delete"},
+    )
+    result = request_json("POST", url, payload=records, token=session.token, verify_tls=verify_tls)
+    _mark_session_active(session)
+    return {
+        "success": True,
+        "message": result.get("message", "成功"),
+        "data": result.get("data"),
+        "requestCount": len(records),
+    }
+
+
+def update_exception_blocks(
+    host: str,
+    namespace: str,
+    *,
+    records: list[dict[str, Any]],
+    key: str | None = None,
+    where: str | None = None,
+    dest: str | None = None,
+    verify_tls: bool = True,
+) -> dict[str, Any]:
+    session = get_active_session(host, namespace, verify_tls=verify_tls, auto_refresh=True)
+    url = build_url(
+        session.host,
+        session.namespace,
+        "/api/batch/v1/namespaces/@namespace/blockip/excludeblockip",
+        query={"_key": key, "_where": where, "_dest": dest},
+    )
+    result = request_json("PATCH", url, payload=records, token=session.token, verify_tls=verify_tls)
+    _mark_session_active(session)
+    return {
+        "success": True,
+        "message": result.get("message", "成功"),
+        "data": result.get("data"),
+        "requestCount": len(records),
+    }
+
+
+def update_exception_block(
+    host: str,
+    namespace: str,
+    *,
+    record: dict[str, Any],
+    key: str | None = None,
+    ip_name: str | None = None,
+    where: str | None = None,
+    dest: str | None = None,
+    verify_tls: bool = True,
+) -> dict[str, Any]:
+    session = get_active_session(host, namespace, verify_tls=verify_tls, auto_refresh=True)
+    url = build_url(
+        session.host,
+        session.namespace,
+        "/api/v1/namespaces/@namespace/blockip/excludeblockip",
+        query={"_key": key, "ipName": ip_name, "_where": where, "_dest": dest},
+    )
+    result = request_json("PATCH", url, payload=record, token=session.token, verify_tls=verify_tls)
+    _mark_session_active(session)
+    return {
+        "success": True,
+        "message": result.get("message", "成功"),
+        "data": result.get("data"),
+        "request": record,
+    }
+
+
+def list_attacker_blocks(
+    host: str,
+    namespace: str,
+    *,
+    creator: str | None = None,
+    start: int | None = None,
+    length: int | None = None,
+    search: str | None = None,
+    sortby: str | None = None,
+    order: str | None = None,
+    verify_tls: bool = True,
+) -> dict[str, Any]:
+    session = get_active_session(host, namespace, verify_tls=verify_tls, auto_refresh=True)
+    url = build_url(
+        session.host,
+        session.namespace,
+        "/api/v1/namespaces/@namespace/blockip",
+        query=_query_params(creator=creator, start=start, length=length, search=search, sortby=sortby, order=order),
+    )
+    result = request_json("GET", url, token=session.token, verify_tls=verify_tls)
+    _mark_session_active(session)
+    return result.get("data") or {}
+
+
+def add_attacker_blocks(
+    host: str,
+    namespace: str,
+    *,
+    payload: dict[str, Any],
+    creator: str | None = None,
+    aifw_type: str | None = None,
+    override: str | None = None,
+    verify_tls: bool = True,
+) -> dict[str, Any]:
+    session = get_active_session(host, namespace, verify_tls=verify_tls, auto_refresh=True)
+    url = build_url(
+        session.host,
+        session.namespace,
+        "/api/batch/v1/namespaces/@namespace/blockip",
+        query={"creator": creator, "aifwType": aifw_type, "override": override},
+    )
+    result = request_json("POST", url, payload=payload, token=session.token, verify_tls=verify_tls)
+    _mark_session_active(session)
+    return {
+        "success": True,
+        "message": result.get("message", "成功"),
+        "data": result.get("data"),
+        "request": payload,
+    }
+
+
+def delete_attacker_blocks(
+    host: str,
+    namespace: str,
+    *,
+    records: list[dict[str, Any]],
+    creator: str | None = None,
+    verify_tls: bool = True,
+) -> dict[str, Any]:
+    session = get_active_session(host, namespace, verify_tls=verify_tls, auto_refresh=True)
+    url = build_url(
+        session.host,
+        session.namespace,
+        "/api/batch/v1/namespaces/@namespace/blockip",
+        query={"_method": "delete", "creator": creator},
+    )
+    result = request_json("POST", url, payload=records, token=session.token, verify_tls=verify_tls)
+    _mark_session_active(session)
+    return {
+        "success": True,
+        "message": result.get("message", "成功"),
+        "data": result.get("data"),
+        "requestCount": len(records),
     }
