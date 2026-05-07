@@ -12,6 +12,19 @@ class GuardrailError(Exception):
     pass
 
 
+CONFIRM_MODE_ALIASES = {
+    "manual": "manual",
+    "手动": "manual",
+    "auto": "auto",
+    "自动": "auto",
+}
+
+CONFIRM_MODE_LABELS = {
+    "manual": "手动",
+    "auto": "自动",
+}
+
+
 @dataclass(slots=True)
 class WhitelistMatch:
     target: str
@@ -103,9 +116,15 @@ def persist_whitelist_file(whitelist_file: str) -> dict[str, Any]:
 
 def _normalize_confirm_mode(value: str) -> str:
     normalized_value = value.strip().lower()
-    if normalized_value not in {"auto", "manual"}:
-        raise GuardrailError("confirm_mode 仅支持 auto 或 manual")
-    return normalized_value
+    mapped_value = CONFIRM_MODE_ALIASES.get(normalized_value)
+    if mapped_value is None:
+        raise GuardrailError("confirm_mode 仅支持 手动/自动")
+    return mapped_value
+
+
+def get_confirm_mode_label(confirm_mode: str) -> str:
+    normalized_mode = _normalize_confirm_mode(confirm_mode)
+    return CONFIRM_MODE_LABELS[normalized_mode]
 
 
 def resolve_confirm_mode(confirm_mode: str | None = None) -> str:
@@ -142,6 +161,17 @@ def _load_raw_rules(whitelist_file: str | None = None) -> list[dict[str, Any]]:
     if not isinstance(rules, list):
         raise GuardrailError("白名单文件格式错误，必须包含 rules 数组")
     return [rule for rule in rules if isinstance(rule, dict)]
+
+
+def get_whitelist_rules(whitelist_file: str | None = None) -> dict[str, Any]:
+    file_path = resolve_whitelist_file(whitelist_file)
+    rules = _load_raw_rules(whitelist_file)
+    return {
+        "whitelistFile": file_path,
+        "exists": os.path.exists(file_path),
+        "ruleCount": len(rules),
+        "rules": rules,
+    }
 
 
 def _normalize_targets(targets: list[str]) -> list[ipaddress._BaseAddress]:
@@ -206,19 +236,20 @@ def check_confirmation(
 
     if normalized_action in WRITE_ACTIONS and mode == "manual":
         requires_confirm = True
-        reason = "当前处于 manual 模式，所有写操作都必须显式确认"
+        reason = "当前处于手动模式，所有写操作都必须显式确认"
     elif normalized_action in ALWAYS_CONFIRM_ACTIONS:
         requires_confirm = True
         reason = "清空类操作必须显式确认"
     elif normalized_action in BATCH_CONFIRM_ACTIONS and mode == "auto":
         requires_confirm = True
-        reason = "当前处于 auto 模式，高风险写操作必须显式确认"
+        reason = "当前处于自动模式，高风险写操作必须显式确认"
 
     if requires_confirm and not confirm:
         return {
             "allowed": False,
             "confirmRequired": True,
             "confirmMode": mode,
+            "confirmModeLabel": get_confirm_mode_label(mode),
             "reason": reason,
         }
 
@@ -226,6 +257,7 @@ def check_confirmation(
         "allowed": True,
         "confirmRequired": requires_confirm,
         "confirmMode": mode,
+        "confirmModeLabel": get_confirm_mode_label(mode),
         "reason": reason,
     }
 
@@ -239,6 +271,7 @@ def describe_guardrails() -> dict[str, Any]:
     persisted_whitelist_file = _load_persisted_whitelist_file()
     return {
         "confirmMode": resolve_confirm_mode(),
+        "confirmModeLabel": get_confirm_mode_label(resolve_confirm_mode()),
         "confirmModeSource": "persisted" if persisted_mode else ("environment" if os.getenv("CONFIRM_MODE") else "default"),
         "confirmModeFile": confirm_mode_file,
         "confirmModeFileExists": os.path.exists(confirm_mode_file),

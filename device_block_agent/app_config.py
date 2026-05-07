@@ -18,6 +18,7 @@ PLANNED_AUTH_TOOLS = [
     "get_confirm_mode",
     "set_confirm_mode",
     "get_whitelist_config",
+    "get_whitelist_rules",
     "set_whitelist_file",
     "check_whitelist_targets",
 ]

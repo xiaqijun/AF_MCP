@@ -86,9 +86,9 @@
     "confirm_mode": {
       "type": "string",
       "title": "确认模式",
-      "description": "manual 表示所有写操作都需要显式确认，auto 表示仅高风险写操作需要显式确认。",
+      "description": "手动 表示所有写操作都需要显式确认，自动 表示仅高风险写操作需要显式确认。",
       "required": true,
-      "default": "manual"
+      "default": "手动"
     },
     "whitelist_file": {
       "type": "file",

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 
@@ -478,6 +479,36 @@ def _parse_body(raw_body: str | None) -> Any:
     return json.loads(raw_body)
 
 
+def _extract_namespace_from_path(path: str) -> str | None:
+  matched = re.search(r"/namespaces/([^/]+)", path)
+  if not matched:
+    return None
+  return matched.group(1)
+
+
+def _canonicalize_request_path(path: str, query: dict[str, Any]) -> tuple[str, str]:
+  namespace = _extract_namespace_from_path(path) or "public"
+  canonical_path = re.sub(r"/namespaces/[^/]+", "/namespaces/@namespace", path)
+  method_override = query.get("_method")
+  if method_override not in (None, ""):
+    canonical_path = f"{canonical_path}?_method={method_override}"
+  return canonical_path, namespace
+
+
+def _to_scalar_query(query_items: list[tuple[str, str]]) -> dict[str, Any]:
+  query: dict[str, Any] = {}
+  for key, value in query_items:
+    if key in query:
+      existing = query[key]
+      if isinstance(existing, list):
+        existing.append(value)
+      else:
+        query[key] = [existing, value]
+      continue
+    query[key] = value
+  return query
+
+
 def _parse_json_example(raw_text: str) -> Any:
   if not raw_text.strip():
     return None
@@ -739,6 +770,27 @@ def create_app() -> FastAPI:
       return simulate_request(catalog, request)
     except json.JSONDecodeError as error:
       raise HTTPException(status_code=400, detail=f"请求体不是合法 JSON: {error}") from error
+
+  @app.api_route("/api/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+  async def af_api_proxy(full_path: str, request: Request) -> JSONResponse:
+      raw_body = await request.body()
+      body_text = raw_body.decode("utf-8") if raw_body else None
+      query = _to_scalar_query(list(request.query_params.multi_items()))
+      canonical_path, namespace = _canonicalize_request_path(f"/api/{full_path}", query)
+      simulation_request = SimulationRequest(
+          path=canonical_path,
+          method=request.method,
+          namespace=namespace,
+          query=query,
+          headers=dict(request.headers),
+          cookies=request.cookies,
+          body=body_text,
+      )
+      try:
+          simulated = simulate_request(catalog, simulation_request)
+      except json.JSONDecodeError as error:
+          raise HTTPException(status_code=400, detail=f"请求体不是合法 JSON: {error}") from error
+      return JSONResponse(status_code=simulated["status_code"], content=simulated["body"])
 
   return app
 

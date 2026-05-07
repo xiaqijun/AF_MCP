@@ -52,13 +52,13 @@
 ## 风控配置
 
 1. `examples/whitelist.sample.json` 提供本地白名单示例。
-2. `confirm_mode` 支持 `manual` 和 `auto` 两种模式。
+2. `confirm_mode` 支持 `手动` 和 `自动` 两种模式，也兼容旧值 `manual` 和 `auto`。
 3. `WHITELIST_FILE` 和 `CONFIRM_MODE` 可通过 `manifest.json` 的 `user_config` 注入运行环境。
 4. 通过 `set_confirm_mode` 工具切换后，会写入本地 `CONFIRM_MODE_FILE`，默认路径为 `data/confirm-mode.json`。
 5. 通过 `set_whitelist_file` 工具切换后，会写入本地白名单配置文件，默认路径为 `data/whitelist-config.json`。
-6. 确认模式解析优先级为：工具显式参数 > 本地持久化配置 > 环境变量 `CONFIRM_MODE` > 默认值 `manual`。
+6. 确认模式解析优先级为：工具显式参数 > 本地持久化配置 > 环境变量 `CONFIRM_MODE` > 默认值 `手动`。
 7. 白名单文件解析优先级为：工具显式参数 > 本地持久化配置 > 环境变量 `WHITELIST_FILE` > 默认样例文件。
-8. `manual` 模式下所有写操作都要求显式确认；`auto` 模式下仅高风险写操作要求显式确认。
+8. `手动` 模式下所有写操作都要求显式确认；`自动` 模式下仅高风险写操作要求显式确认。
 9. `LOG_FILE` 可用于指定本地 JSONL 审计日志路径。
 10. `SESSION_FILE` 可用于指定本地 JSON 会话持久化路径。
 11. `SESSION_TIMEOUT_SECONDS` 和 `SESSION_REFRESH_WINDOW_SECONDS` 可用于控制本地会话超时与自动保活窗口。
@@ -81,27 +81,28 @@
 6. `get_confirm_mode`
 7. `set_confirm_mode`
 8. `get_whitelist_config`
-9. `set_whitelist_file`
-10. `check_whitelist_targets`
-11. `block_list_exceptions`
-12. `block_add_exceptions`
-13. `block_delete_exceptions`
-14. `block_update_exceptions`
-15. `block_update_exception`
-16. `block_list_attackers`
-17. `block_list_temp`
-18. `block_list_business`
-19. `block_get_total_count`
-20. `block_get_block_time`
-21. `block_add_attackers`
-22. `block_delete_attackers`
-23. `block_add_business`
-24. `block_delete_temp`
-25. `block_delete_business`
-26. `block_clear_attackers`
-27. `block_clear_temp`
-28. `block_clear_business`
-29. `block_set_block_time`
+9. `get_whitelist_rules`
+10. `set_whitelist_file`
+11. `check_whitelist_targets`
+12. `block_list_exceptions`
+13. `block_add_exceptions`
+14. `block_delete_exceptions`
+15. `block_update_exceptions`
+16. `block_update_exception`
+17. `block_list_attackers`
+18. `block_list_temp`
+19. `block_list_business`
+20. `block_get_total_count`
+21. `block_get_block_time`
+22. `block_add_attackers`
+23. `block_delete_attackers`
+24. `block_add_business`
+25. `block_delete_temp`
+26. `block_delete_business`
+27. `block_clear_attackers`
+28. `block_clear_temp`
+29. `block_clear_business`
+30. `block_set_block_time`
 
 ## 下一步实现
 

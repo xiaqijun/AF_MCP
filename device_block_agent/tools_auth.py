@@ -5,7 +5,7 @@ from .account_config import get_account_defaults, resolve_connection_settings, r
 from .af_client import AFClientError, keepalive, login, logout
 from .app_config import DEFAULT_CONFIRM_MODE, DEFAULT_WHITELIST_FILE
 from .audit_log import append_audit_log
-from .risk_controls import GuardrailError, check_whitelist, describe_guardrails, persist_confirm_mode, persist_whitelist_file, resolve_confirm_mode, resolve_confirm_mode_file, resolve_whitelist_config_file, resolve_whitelist_file
+from .risk_controls import GuardrailError, check_whitelist, describe_guardrails, get_confirm_mode_label, get_whitelist_rules, persist_confirm_mode, persist_whitelist_file, resolve_confirm_mode, resolve_confirm_mode_file, resolve_whitelist_config_file, resolve_whitelist_file
 
 
 def _auth_error_result(action: str, error: AFClientError, context: dict[str, Any]) -> dict[str, Any]:
@@ -125,22 +125,24 @@ def register_auth_tools(mcp: Any) -> None:
 
     @mcp.tool(
         name="get_confirm_mode",
-        description="返回当前有效的确认模式，用于判断高风险写操作按 manual 还是 auto 处理。",
+        description="返回当前有效的确认模式，用于判断高风险写操作按 手动 还是 自动 处理。",
     )
     def get_confirm_mode() -> dict[str, Any]:
         mode = resolve_confirm_mode()
         return {
             "success": True,
             "confirmMode": mode,
+            "confirmModeLabel": get_confirm_mode_label(mode),
             "source": "persisted" if os.path.exists(resolve_confirm_mode_file()) else ("environment" if os.getenv("CONFIRM_MODE") else "default"),
             "confirmModeFile": resolve_confirm_mode_file(),
             "persisted": os.path.exists(resolve_confirm_mode_file()),
             "defaultConfirmMode": DEFAULT_CONFIRM_MODE,
+            "defaultConfirmModeLabel": get_confirm_mode_label(DEFAULT_CONFIRM_MODE),
         }
 
     @mcp.tool(
         name="set_confirm_mode",
-        description="设置当前进程内全局确认模式，可切换为 auto 或 manual。",
+        description="设置当前进程内全局确认模式，可切换为 手动 或 自动。",
     )
     def set_confirm_mode(mode: str) -> dict[str, Any]:
         try:
@@ -150,10 +152,11 @@ def register_auth_tools(mcp: Any) -> None:
             result = {
                 "success": True,
                 "confirmMode": normalized_mode,
+                "confirmModeLabel": get_confirm_mode_label(normalized_mode),
                 "persisted": True,
                 "confirmModeFile": resolve_confirm_mode_file(),
                 "updatedAt": persistence["updatedAt"],
-                "message": f"确认模式已切换为 {normalized_mode}",
+                "message": f"确认模式已切换为 {get_confirm_mode_label(normalized_mode)}",
             }
             append_audit_log("set_confirm_mode", {"success": True, "confirmMode": normalized_mode, "result": result})
             return result
@@ -177,6 +180,23 @@ def register_auth_tools(mcp: Any) -> None:
             "defaultWhitelistFile": DEFAULT_WHITELIST_FILE,
             "ruleCount": guardrails["whitelistRuleCount"],
         }
+
+    @mcp.tool(
+        name="get_whitelist_rules",
+        description="返回当前生效白名单文件的完整规则配置。",
+    )
+    def get_whitelist_rules_tool(whitelist_file: str | None = None) -> dict[str, Any]:
+        try:
+            result = get_whitelist_rules(whitelist_file)
+            return {
+                "success": True,
+                "whitelistFile": result["whitelistFile"],
+                "exists": result["exists"],
+                "ruleCount": result["ruleCount"],
+                "rules": result["rules"],
+            }
+        except GuardrailError as error:
+            return _guardrail_error_result("get_whitelist_rules", error, {"whitelist_file": whitelist_file})
 
     @mcp.tool(
         name="set_whitelist_file",
