@@ -125,7 +125,7 @@ def register_auth_tools(mcp: Any) -> None:
 
     @mcp.tool(
         name="set_usg_connection",
-        description="通过聊天输入并持久化 USG6000F 连接账号；USG 使用 Basic Auth，不建立独立登录会话。",
+        description="通过聊天输入并持久化 USG6000F 连接账号；保存连接信息后，调用真实设备 API 前仍需先执行 usg_login。",
     )
     def set_usg_connection(
         usg_host: str,
@@ -163,10 +163,10 @@ def register_auth_tools(mcp: Any) -> None:
                 "passwordConfigured": True,
                 "verifySsl": settings["verify_ssl"],
                 "authMode": "basic-auth-per-request",
-                "loginRequired": False,
+                "loginRequired": True,
                 "accountFile": resolve_usg_account_file(),
                 "persisted": True,
-                "message": "USG 连接账号已保存，后续可直接在聊天中执行 USG 工具，无需单独登录。",
+                "message": "USG 连接账号已保存；调用真实设备 API 前，请先执行 usg_login 建立本地登录态。",
             }
             append_audit_log("set_usg_connection", {"success": True, "host": settings["host"], "username": settings["username"], "persisted": persistence, "result": result})
             return result

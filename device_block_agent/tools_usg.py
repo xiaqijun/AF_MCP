@@ -12,6 +12,7 @@ from typing import Any
 from .account_config import resolve_usg_connection_settings, validate_usg_connection_settings
 from .audit_log import append_audit_log
 from .risk_controls import check_confirmation, check_whitelist, resolve_confirm_mode, resolve_whitelist_file
+from .usg_session import USGAuthError, clear_usg_session, create_usg_session, describe_usg_session, get_active_usg_session, touch_usg_session
 from .usg_whitelist import auto_load_default as _wl_auto_load, get_engine as _get_wl_engine
 from . import usg_snapshot as _snap
 
@@ -83,8 +84,7 @@ def _ssl_context(verify_ssl: bool) -> ssl.SSLContext:
     return context
 
 
-def _request(settings: dict[str, Any], method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-    _validate_usg_settings(settings)
+def _execute_request(settings: dict[str, Any], method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     url = _base_url(settings) + path
     data = json.dumps(body).encode() if body else None
     request = urllib.request.Request(url, data=data, headers=_json_headers(settings), method=method)
@@ -97,12 +97,33 @@ def _request(settings: dict[str, Any], method: str, path: str, body: dict[str, A
         raise RuntimeError(f"HTTP {error.code} {error.reason}: {body_text[:300]}") from error
 
 
+def _require_usg_login(settings: dict[str, Any]) -> None:
+    get_active_usg_session(settings["host"], settings["port"], settings["username"])
+
+
+def _request(settings: dict[str, Any], method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    _validate_usg_settings(settings)
+    _require_usg_login(settings)
+    result = _execute_request(settings, method, path, body)
+    touch_usg_session(settings["host"], settings["port"], settings["username"])
+    return result
+
+
 def _config_error_result(error: ValueError) -> dict[str, Any]:
     return {
         "success": False,
         "code": "config_error",
         "message": str(error),
-        "nextStep": "USG 不需要像 AF 那样先登录，但必须先配置 usg_host、usg_username、usg_password。",
+        "nextStep": "请先配置 usg_host、usg_username、usg_password，然后调用 usg_login。",
+    }
+
+
+def _auth_error_result(error: Exception) -> dict[str, Any]:
+    return {
+        "success": False,
+        "code": "auth_required",
+        "message": str(error),
+        "nextStep": "请先调用 usg_login，登录成功后再执行真实设备 API。",
     }
 
 
@@ -205,6 +226,7 @@ def register_usg_tools(mcp: Any) -> None:
             usg_username=usg_username,
             usg_verify_ssl=usg_verify_ssl,
         )
+        session_status = describe_usg_session(settings["host"], settings["port"], settings["username"])
         return {
             "success": True,
             "host": settings["host"],
@@ -213,13 +235,86 @@ def register_usg_tools(mcp: Any) -> None:
             "passwordConfigured": bool(_resolve_usg_settings(usg_password=None)["password"]),
             "verifySsl": settings["verify_ssl"],
             "authMode": "basic-auth-per-request",
-            "loginRequired": False,
-            "message": "USG 通过 RESTCONF Basic Auth 按请求鉴权，不像 AF 那样维护单独登录会话。",
+            "loginRequired": True,
+            "loggedIn": session_status["loggedIn"],
+            "session": session_status,
+            "message": "USG 调用真实 RESTCONF 接口前需要先执行 usg_login；登录态仅在本地会话中维护。",
             "whitelistAutoLoaded": bool(_WL_AUTOLOAD_PATH),
             "whitelistPath": _WL_AUTOLOAD_PATH,
             "sharedWhitelistFile": resolve_whitelist_file(),
             "sharedConfirmMode": resolve_confirm_mode(),
         }
+
+    @mcp.tool(name="usg_login", description="校验 USG6000F 连接账号并建立本地登录态；后续真实设备 API 调用必须先登录。")
+    def usg_login(
+        usg_host: str | None = None,
+        usg_port: str | None = None,
+        usg_username: str | None = None,
+        usg_password: str | None = None,
+        usg_verify_ssl: bool | str | None = None,
+    ) -> dict[str, Any]:
+        try:
+            settings = _resolve_usg_settings(
+                usg_host=usg_host,
+                usg_port=usg_port,
+                usg_username=usg_username,
+                usg_password=usg_password,
+                usg_verify_ssl=usg_verify_ssl,
+            )
+            _validate_usg_settings(settings)
+            _execute_request(settings, "GET", "/huawei-blacklist:blacklist/blacklist-items/blacklist-item")
+            session = create_usg_session(settings["host"], settings["port"], settings["username"])
+            session_status = describe_usg_session(settings["host"], settings["port"], settings["username"])
+            result = {
+                "success": True,
+                "host": settings["host"],
+                "port": settings["port"],
+                "username": settings["username"],
+                "loggedIn": True,
+                "authenticatedAt": session.authenticated_at,
+                "expiresAt": session.expires_at,
+                "session": session_status,
+                "message": "USG 登录成功，后续可调用真实设备 API。",
+            }
+            append_audit_log("usg_login", {"success": True, "host": settings["host"], "username": settings["username"], "result": result})
+            return result
+        except ValueError as error:
+            return _config_error_result(error)
+        except Exception as error:
+            result = {"success": False, "code": "auth_failed", "message": str(error)}
+            append_audit_log("usg_login", {"success": False, "host": usg_host, "username": usg_username, "result": result})
+            return result
+
+    @mcp.tool(name="usg_logout", description="清除当前 USG6000F 的本地登录态；之后调用真实设备 API 需重新执行 usg_login。")
+    def usg_logout(
+        usg_host: str | None = None,
+        usg_port: str | None = None,
+        usg_username: str | None = None,
+    ) -> dict[str, Any]:
+        settings = _resolve_usg_settings(
+            usg_host=usg_host,
+            usg_port=usg_port,
+            usg_username=usg_username,
+        )
+        host = settings["host"]
+        port = settings["port"]
+        username = settings["username"]
+        if not host:
+            return {"success": False, "code": "config_error", "message": "缺少 usg_host，无法定位要清除的 USG 登录态"}
+        if not username:
+            return {"success": False, "code": "config_error", "message": "缺少 usg_username，无法定位要清除的 USG 登录态"}
+        removed = clear_usg_session(host, port, username)
+        result = {
+            "success": True,
+            "loggedOut": True,
+            "existed": removed is not None,
+            "host": host,
+            "port": port,
+            "username": username,
+            "message": "USG 本地登录态已清除。",
+        }
+        append_audit_log("usg_logout", {"success": True, "host": host, "username": username, "result": result})
+        return result
 
     @mcp.tool(name="usg_get_blacklist", description="查询 USG6000F 当前黑名单列表，可按 IP 过滤。")
     def usg_get_blacklist(
@@ -246,6 +341,8 @@ def register_usg_tools(mcp: Any) -> None:
             return {"success": True, "count": len(items), "items": items, "raw": data}
         except ValueError as error:
             return _config_error_result(error)
+        except USGAuthError as error:
+            return _auth_error_result(error)
         except Exception as error:
             return {"success": False, "message": str(error)}
 
@@ -405,6 +502,8 @@ def register_usg_tools(mcp: Any) -> None:
             return response
         except ValueError as error:
             return _config_error_result(error)
+        except USGAuthError as error:
+            return _auth_error_result(error)
         except Exception as error:
             return {"success": False, "message": str(error)}
 
@@ -508,6 +607,8 @@ def register_usg_tools(mcp: Any) -> None:
         try:
             result = _request(settings, "DELETE", f"/huawei-blacklist:blacklist/blacklist-items/blacklist-item={ip_address}")
             ok = True
+        except USGAuthError as error:
+            return _auth_error_result(error)
         except Exception as error:
             result = {"error": str(error)}
             ok = False
@@ -606,6 +707,8 @@ def register_usg_tools(mcp: Any) -> None:
                 _request(settings, "DELETE", f"/huawei-blacklist:blacklist/blacklist-items/blacklist-item={ip_address}")
                 ok = True
                 error_message = None
+            except USGAuthError as error:
+                return _auth_error_result(error)
             except Exception as error:
                 ok = False
                 error_message = str(error)

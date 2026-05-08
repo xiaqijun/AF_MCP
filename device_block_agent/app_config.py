@@ -15,6 +15,8 @@ DEFAULT_LOG_FILE = "logs/device-block-agent.jsonl"
 DEFAULT_SESSION_FILE = "data/sessions.json"
 DEFAULT_SESSION_TIMEOUT_SECONDS = 600
 DEFAULT_SESSION_REFRESH_WINDOW_SECONDS = 120
+DEFAULT_USG_SESSION_FILE = "data/usg-sessions.json"
+DEFAULT_USG_SESSION_TIMEOUT_SECONDS = 600
 DEFAULT_USG_WHITELIST_PATH = "config/usg-whitelist.yaml"
 
 PLANNED_AUTH_TOOLS = [
@@ -23,6 +25,8 @@ PLANNED_AUTH_TOOLS = [
     "auth_logout",
     "set_usg_connection",
     "clear_usg_connection",
+    "usg_login",
+    "usg_logout",
     "get_confirm_mode",
     "set_confirm_mode",
     "get_whitelist_config",
@@ -33,6 +37,8 @@ PLANNED_AUTH_TOOLS = [
 
 PLANNED_USG_TOOLS = [
     "usg_connection_status",
+    "usg_login",
+    "usg_logout",
     "usg_get_blacklist",
     "usg_preview_blacklist_add",
     "usg_apply_blacklist_add",

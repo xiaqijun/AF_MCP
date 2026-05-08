@@ -143,7 +143,7 @@ def get_account_defaults() -> dict[str, Any]:
             "passwordConfigured": bool(usg_settings["password"]),
             "verifySsl": usg_settings["verify_ssl"],
             "authMode": "basic-auth-per-request",
-            "loginRequired": False,
+            "loginRequired": True,
             "source": usg_settings["source"],
             "accountFile": usg_settings["accountFile"],
         },

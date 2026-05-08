@@ -76,10 +76,11 @@
 3. `af_username` 和 `af_password` 用于配置默认登录账号。
 4. `af_verify_tls` 用于配置默认 HTTPS 证书校验开关。
 5. USG 连接账号不再通过 manifest 默认配置；应先在聊天中调用 `set_usg_connection` 录入 `usg_host`、`usg_port`、`usg_username`、`usg_password`、`usg_verify_ssl`。
-6. `usg_whitelist_path` 用于指定 USG 五层白名单 YAML，默认是 [config/usg-whitelist.yaml](config/usg-whitelist.yaml)。
-7. `usg_action_dir` 用于指定 USG 黑名单动作快照与回滚目录。
-8. AF 与 USG 的配置是分开的：AF 工具可复用 manifest 中的 AF 默认值，USG 工具优先复用聊天中通过 `set_usg_connection` 保存的配置。
-9. 即使在同一条处置流程中同时使用 AF 和 USG，也应将其理解为“同一智能体协调两台设备”，而不是“同一台设备上的两类接口”。
+6. 调用 USG 真实设备 API 前，必须先执行 `usg_login`；如需结束本地登录态，可执行 `usg_logout`。
+7. `usg_whitelist_path` 用于指定 USG 五层白名单 YAML，默认是 [config/usg-whitelist.yaml](config/usg-whitelist.yaml)。
+8. `usg_action_dir` 用于指定 USG 黑名单动作快照与回滚目录。
+9. AF 与 USG 的配置是分开的：AF 工具可复用 manifest 中的 AF 默认值，USG 工具优先复用聊天中通过 `set_usg_connection` 保存的配置，但真实设备调用仍需先 `usg_login`。
+10. 即使在同一条处置流程中同时使用 AF 和 USG，也应将其理解为“同一智能体协调两台设备”，而不是“同一台设备上的两类接口”。
 
 ## 设备边界
 
@@ -124,18 +125,20 @@
 31. `block_clear_business`
 32. `block_set_block_time`
 33. `usg_connection_status`
-34. `usg_get_blacklist`
-35. `usg_preview_blacklist_add`
-36. `usg_apply_blacklist_add`
-37. `usg_whitelist_check`
-38. `usg_whitelist_reload`
-39. `usg_whitelist_list`
-40. `usg_whitelist_stats`
-41. `usg_preview_blacklist_unblock`
-42. `usg_apply_blacklist_unblock`
-43. `usg_list_actions`
-44. `usg_get_action_detail`
-45. `usg_unblock_recent`
+34. `usg_login`
+35. `usg_logout`
+36. `usg_get_blacklist`
+37. `usg_preview_blacklist_add`
+38. `usg_apply_blacklist_add`
+39. `usg_whitelist_check`
+40. `usg_whitelist_reload`
+41. `usg_whitelist_list`
+42. `usg_whitelist_stats`
+43. `usg_preview_blacklist_unblock`
+44. `usg_apply_blacklist_unblock`
+45. `usg_list_actions`
+46. `usg_get_action_detail`
+47. `usg_unblock_recent`
 
 ## 下一步实现
 
