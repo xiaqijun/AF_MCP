@@ -1,0 +1,43 @@
+# USG6000F 白名单正式配置
+
+ip:
+  - cidr: 10.0.0.0/8
+    comment: 内网核心段
+  - cidr: 172.16.0.0/12
+    comment: 业务系统段
+  - cidr: 192.168.0.0/16
+    comment: 办公段
+
+asn:
+  - asn: 4134
+    comment: 中国电信 CHINANET-BACKBONE
+  - asn: 4837
+    comment: 中国联通 CHINA169-BACKBONE
+  - asn: 9808
+    comment: 中国移动 CMNET
+
+domain:
+  - pattern: "*.cmhk.com"
+    comment: 主域
+
+tag:
+  - tag: core_business
+    action: block
+    comment: 核心业务资产，禁止自动封禁
+  - tag: dr_site
+    action: block
+    comment: 灾备站点
+  - tag: ops_segment
+    action: block
+    comment: 运维段
+  - tag: safety_critical
+    action: block
+    comment: 安全关键系统
+
+biz_hour:
+  timezone: Asia/Shanghai
+  workdays: [mon, tue, wed, thu, fri]
+  work_hours:
+    start: "09:00"
+    end: "18:00"
+  action: warn

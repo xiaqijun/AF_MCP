@@ -1,0 +1,108 @@
+{
+  "dxt_version": "0.1",
+  "name": "@aipy-cybersecurity/usg6000f",
+  "display_name": "华为 HiSecEngine USG6000F 防火墙管理",
+  "version": "0.1.0",
+  "description": "通过 RESTCONF/YANG API 管理华为 HiSecEngine USG6000F 防火墙，支持安全策略、NAT、ACL、接口、路由、会话、VPN、黑名单的查询与配置。",
+  "long_description": "通过本插件，AI 智能体可直接查询和管理华为 HiSecEngine USG6000F 系列防火墙，包括：\n- 安全策略：查询、新增、修改策略规则\n- NAT：源 NAT / 目的 NAT 规则管理\n- ACL：访问控制列表查询\n- 接口：接口状态、IP 地址查询\n- 静态路由：路由表查询与配置\n- 会话表：当前连接会话查询\n- IPSec VPN：隧道状态查询\n- 黑名单：IP 黑名单查询与管理\n\n写操作均采用两步确认机制（preview → apply），防止误操作。",
+  "author": {
+    "name": "usg6000f-mcp"
+  },
+  "license": "MIT",
+  "keywords": [
+    "conversation-tool",
+    "firewall",
+    "security",
+    "huawei",
+    "USG6000F",
+    "RESTCONF",
+    "YANG"
+  ],
+  "server": {
+    "type": "python",
+    "entry_point": "server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "${__dirname}/server.py",
+        "--host",       "${user_config.usg_host}",
+        "--port",       "${user_config.usg_port}",
+        "--username",   "${user_config.usg_username}",
+        "--password",   "${user_config.usg_password}",
+        "--verify-ssl", "${user_config.usg_verify_ssl}"
+      ],
+      "env": {}
+    }
+  },
+  "tools": [
+    {"name": "get_security_policies",   "description": "查询安全策略列表，支持按策略名称过滤"},
+    {"name": "get_nat_rules",           "description": "查询 NAT 规则（源NAT/目的NAT），支持按实例名过滤"},
+    {"name": "get_acl_rules",           "description": "查询 ACL 列表及规则，支持按 ACL 编号过滤"},
+    {"name": "get_interfaces",          "description": "查询接口列表，包含接口状态、IP 地址、描述等信息"},
+    {"name": "get_static_routes",       "description": "查询 IPv4 静态路由表，支持按目的网段过滤"},
+    {"name": "get_sessions",            "description": "查询当前会话表，支持按源/目的 IP 过滤"},
+    {"name": "get_ipsec_tunnels",       "description": "查询 IPSec VPN 隧道状态列表"},
+    {"name": "get_blacklist",           "description": "查询 IP 黑名单列表"},
+    {"name": "preview_security_policy", "description": "预览新增或修改安全策略的变更内容（不实际下发）"},
+    {"name": "apply_security_policy",   "description": "提交安全策略变更，需传入 confirmed=true"},
+    {"name": "preview_nat_rule",        "description": "预览 NAT 规则变更内容（不实际下发）"},
+    {"name": "apply_nat_rule",          "description": "提交 NAT 规则变更，需传入 confirmed=true"},
+    {"name": "preview_blacklist_add",   "description": "预览向黑名单添加 IP 的操作（不实际下发）"},
+    {"name": "apply_blacklist_add",     "description": "提交黑名单 IP 添加，需传入 confirmed=true"},
+    {"name": "preview_static_route",    "description": "预览静态路由新增或修改（不实际下发）"},
+    {"name": "apply_static_route",      "description": "提交静态路由变更，需传入 confirmed=true"},
+
+    {"name": "whitelist_check",         "description": "★ 对指定 IP 做五层白名单校验（IP/CIDR、ASN、域名、资产标签、业务时段）"},
+    {"name": "whitelist_reload",        "description": "热加载/重新加载白名单 YAML"},
+    {"name": "whitelist_list",          "description": "查询当前加载的全部白名单条目"},
+    {"name": "whitelist_stats",         "description": "查看白名单命中率与引擎状态"},
+
+    {"name": "preview_blacklist_unblock","description": "★ 预览按 action_id 解封某次封禁"},
+    {"name": "apply_blacklist_unblock", "description": "★【应急】按 action_id 解封，支持 pre_state 回滚"},
+    {"name": "unblock_recent",          "description": "★【紧急批量回退】解封最近 N 分钟内全部自动封禁（误封应急出口）"},
+    {"name": "list_actions",            "description": "查询最近处置动作列表（按 IP / 状态过滤）"},
+    {"name": "get_action_detail",       "description": "查询单个 action 完整详情（含 pre_state + 设备响应 + 审计链）"}
+  ],
+  "prompts": [
+    {
+      "name": "addition-system-instruction",
+      "description": "向对话上下文注入华为 USG6000F 防火墙管理能力说明",
+      "text": "注入华为 HiSecEngine USG6000F 防火墙管理能力。所有写操作均为两步：先调用 preview_* 预览，用户确认后再调用 apply_*（confirmed=true）执行。读操作可直接调用。"
+    }
+  ],
+  "user_config": {
+    "usg_host": {
+      "type": "string",
+      "title": "设备 IP",
+      "description": "USG6000F 管理 IP 地址，如 192.168.1.1",
+      "required": true
+    },
+    "usg_port": {
+      "type": "string",
+      "title": "RESTCONF 端口",
+      "description": "RESTCONF 服务端口（通常为 443）",
+      "default": "443",
+      "required": false
+    },
+    "usg_username": {
+      "type": "string",
+      "title": "管理员账号",
+      "description": "USG6000F 管理员用户名",
+      "required": true
+    },
+    "usg_password": {
+      "type": "string",
+      "title": "管理员密码",
+      "description": "USG6000F 管理员密码",
+      "required": true
+    },
+    "usg_verify_ssl": {
+      "type": "string",
+      "title": "验证 SSL 证书",
+      "description": "是否验证 HTTPS 证书（false 跳过验证，适用于自签名证书）",
+      "default": "false",
+      "required": false
+    }
+  }
+}

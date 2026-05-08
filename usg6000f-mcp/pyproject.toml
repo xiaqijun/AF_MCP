@@ -1,0 +1,8 @@
+[project]
+name = "usg6000f-mcp"
+version = "0.1.0"
+description = "华为 USG6000F 防火墙 MCP Server"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+]

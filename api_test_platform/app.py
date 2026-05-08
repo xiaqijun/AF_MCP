@@ -620,6 +620,86 @@ def _mock_paginated(items: list[dict[str, Any]], page_size: int = 200, page_numb
   }
 
 
+def _extract_usg_blacklist_items(body: Any) -> list[dict[str, Any]]:
+  if not isinstance(body, dict):
+    return []
+  items = body.get("huawei-blacklist:blacklist-item")
+  if isinstance(items, list):
+    return [item for item in items if isinstance(item, dict) and item.get("ip")]
+  return []
+
+
+def _build_usg_blacklist_response(items: list[dict[str, Any]]) -> dict[str, Any]:
+  normalized_items = []
+  for item in items:
+    normalized = dict(item)
+    normalized.setdefault("description", "")
+    normalized.setdefault("expire-time", 0)
+    normalized_items.append(normalized)
+  return {
+    "huawei-blacklist:blacklist-item": normalized_items,
+  }
+
+
+def _simulate_usg_restconf(
+  store: dict[str, dict[str, Any]],
+  method: str,
+  path: str,
+  body: Any,
+) -> tuple[int, dict[str, Any]]:
+  normalized_method = method.upper()
+  collection_path = "/huawei-blacklist:blacklist/blacklist-items/blacklist-item"
+
+  if normalized_method == "GET" and path == collection_path:
+    return 200, _build_usg_blacklist_response(list(store.values()))
+
+  if normalized_method == "POST" and path == collection_path:
+    items = _extract_usg_blacklist_items(body)
+    if not items:
+      return 400, {
+        "error-code": "mock-invalid-payload",
+        "error-message": "请求体中缺少 huawei-blacklist:blacklist-item 列表或 ip 字段",
+      }
+    for item in items:
+      ip_address = str(item["ip"])
+      stored = dict(store.get(ip_address) or {})
+      stored.update(item)
+      stored["ip"] = ip_address
+      store[ip_address] = stored
+    return 201, {
+      "result": "created",
+      "count": len(items),
+      "items": _build_usg_blacklist_response(items)["huawei-blacklist:blacklist-item"],
+    }
+
+  if path.startswith(f"{collection_path}="):
+    ip_address = path.split("=", 1)[1]
+    if normalized_method == "GET":
+      item = store.get(ip_address)
+      if item is None:
+        return 404, {
+          "error-code": "mock-not-found",
+          "error-message": f"未找到黑名单 IP: {ip_address}",
+        }
+      return 200, _build_usg_blacklist_response([item])
+    if normalized_method == "DELETE":
+      if ip_address not in store:
+        return 404, {
+          "error-code": "mock-not-found",
+          "error-message": f"未找到黑名单 IP: {ip_address}",
+        }
+      deleted = store.pop(ip_address)
+      return 200, {
+        "result": "deleted",
+        "item": deleted,
+      }
+
+  return 404, {
+    "error-code": "mock-endpoint-not-found",
+    "error-message": f"未实现的 USG 模拟接口: {normalized_method} {path}",
+  }
+
+
 def _build_mock_body(endpoint: ApiEndpoint, namespace: str, query: dict[str, Any], body: Any) -> Any:
   parsed_example = _parse_json_example(endpoint.response_example)
   if isinstance(parsed_example, dict):
@@ -755,6 +835,7 @@ def simulate_request(catalog: list[ApiEndpoint], request: SimulationRequest) -> 
 def create_app() -> FastAPI:
   app = FastAPI(title="AF API 模拟平台", version="0.1.0")
   catalog = load_catalog()
+  usg_blacklist_store: dict[str, dict[str, Any]] = {}
 
   @app.get("/", response_class=HTMLResponse)
   async def index() -> str:
@@ -770,6 +851,22 @@ def create_app() -> FastAPI:
       return simulate_request(catalog, request)
     except json.JSONDecodeError as error:
       raise HTTPException(status_code=400, detail=f"请求体不是合法 JSON: {error}") from error
+
+  @app.api_route("/restconf/data/{full_path:path}", methods=["GET", "POST", "DELETE"])
+  async def usg_restconf_proxy(full_path: str, request: Request) -> JSONResponse:
+      raw_body = await request.body()
+      try:
+          parsed_body = json.loads(raw_body.decode("utf-8")) if raw_body else None
+      except json.JSONDecodeError as error:
+          raise HTTPException(status_code=400, detail=f"请求体不是合法 JSON: {error}") from error
+
+      status_code, response_body = _simulate_usg_restconf(
+          usg_blacklist_store,
+          request.method,
+          f"/{full_path}",
+          parsed_body,
+      )
+      return JSONResponse(status_code=status_code, content=response_body)
 
   @app.api_route("/api/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
   async def af_api_proxy(full_path: str, request: Request) -> JSONResponse:

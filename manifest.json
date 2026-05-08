@@ -3,7 +3,7 @@
   "name": "@aipy-pro/device-block-agent",
   "display_name": "设备联动封禁智能体",
   "version": "0.1.0",
-  "description": "基于 FastMCP 的 AF 设备联动封禁智能体脚手架。",
+  "description": "基于 FastMCP 的设备联动封禁智能体，统一编排 AF 与 USG6000F 两台独立设备。",
   "author": {
     "name": "AiPy Team"
   },
@@ -22,6 +22,8 @@
         "AF_USERNAME": "${user_config.af_username}",
         "AF_PASSWORD": "${user_config.af_password}",
         "AF_VERIFY_TLS": "${user_config.af_verify_tls}",
+        "USG_WHITELIST_PATH": "${user_config.usg_whitelist_path}",
+        "USG_ACTION_DIR": "${user_config.usg_action_dir}",
         "CONFIRM_MODE": "${user_config.confirm_mode}",
         "WHITELIST_FILE": "${user_config.whitelist_file}",
         "LOG_FILE": "${user_config.log_file}",
@@ -41,7 +43,7 @@
     {
       "name": "addition-system-instruction",
       "description": "向当前任务注入设备联动封禁智能体的补充系统提示词。",
-      "text": "你正在使用设备联动封禁智能体，请以专业运维助手的方式工作。先识别用户意图：如果是在咨询概念、解释结果、比较方案、确认配置或排查原因，优先直接回答，不要为了调用工具而调用工具。如果需要调用工具，先用一句自然中文说明你将要检查什么或执行什么，再尽量复用默认 host、namespace、账号和已有会话；若登录态缺失、配置不完整或目标不明确，要直接指出阻塞点。查询类请求应输出清楚结论，重点突出对象、命名空间、数量、状态、时间范围、关键字段和异常信息；不要只原样转储返回结果。写操作类请求包括例外封锁增删改、封锁攻击者增删清空、临时封锁删除清空、业务封锁增删清空、自动封锁时间修改，以及确认模式切换。执行写操作前，必须先判断是否命中白名单，是否需要显式确认，是否存在高风险范围过大、清空类动作或信息不足的问题。对白名单目标、未授权目标、信息不完整目标、目标范围过大、清空类动作或需要人工确认但尚未确认的请求，不得直接执行。执行完成后，应明确说明：是否成功、影响了哪些对象、是否通过回检、还有哪些残余风险、用户下一步可以做什么。"
+      "text": "你正在使用设备联动封禁智能体，请以值班运维助手的方式工作。回答要简洁、专业、可核实，优先给出结论，再补原因、影响范围和下一步。不要虚构团队成员、处罚、绩效、节省成本、提效倍数、自动重试、待办记录或设备侧状态；如果工具没有返回这些信息，就不要写。先识别用户意图：如果是在咨询概念、解释结果、比较方案、确认配置或排查原因，优先直接回答，不要为了调用工具而调用工具。AF 和 USG6000F 属于两台不同设备，不能把 AF_HOST 和 USG_HOST 视为同一目标；如果需要调用工具，先用一句自然中文说明你将要检查什么或执行什么，并明确本次操作针对 AF 还是 USG。AF 可复用 manifest 中的默认连接配置；USG 不维护独立登录会话，应优先通过聊天工具 set_usg_connection 录入连接账号后再执行 USG 工具。若登录态缺失、配置不完整、目标不明确或确认条件不足，要直接指出阻塞点。查询类请求应输出清楚结论，重点突出对象、设备、命名空间、数量、状态、时间范围、关键字段和异常信息；不要只原样转储返回结果。写操作类请求包括 AF 的例外封锁增删改、封锁攻击者增删清空、临时封锁删除清空、业务封锁增删清空、自动封锁时间修改，以及 USG6000F 的黑名单预览、下发、解封与批量回退。执行写操作前，必须先判断是否命中白名单，是否需要显式确认，是否存在高风险范围过大、清空类动作或信息不足的问题；对于 USG 黑名单操作，必须先 preview 再 apply。对白名单目标、未授权目标、信息不完整目标、目标范围过大、清空类动作或需要人工确认但尚未确认的请求，不得直接执行。执行完成后，应明确说明：是否成功、影响了哪台设备、影响了哪些对象、是否通过回检、还有哪些残余风险、用户下一步可以做什么。"
     }
   ],
   "keywords": [
@@ -51,7 +53,7 @@
     "af_host": {
       "type": "string",
       "title": "AF 主机地址",
-      "description": "默认 AF 管理地址，可填写域名或 IP。",
+      "description": "AF 设备管理地址，可填写域名或 IP；这是 AF 独立设备的地址，不会复用于 USG。",
       "required": false,
       "default": ""
     },
@@ -82,6 +84,20 @@
       "description": "是否默认校验 AF HTTPS 证书。",
       "required": false,
       "default": true
+    },
+    "usg_whitelist_path": {
+      "type": "file",
+      "title": "USG 白名单 YAML",
+      "description": "USG 五层白名单 YAML 文件路径。",
+      "required": false,
+      "default": "${__dirname}/config/usg-whitelist.yaml"
+    },
+    "usg_action_dir": {
+      "type": "string",
+      "title": "USG 动作快照目录",
+      "description": "USG 黑名单处置动作与回滚快照目录。",
+      "required": false,
+      "default": "${__dirname}/data/usg-actions"
     },
     "confirm_mode": {
       "type": "string",

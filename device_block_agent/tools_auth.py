@@ -1,7 +1,7 @@
 import os
 from typing import Any
 
-from .account_config import get_account_defaults, resolve_connection_settings, resolve_login_settings, validate_connection_settings, validate_login_settings
+from .account_config import clear_persisted_usg_connection_settings, get_account_defaults, persist_usg_connection_settings, resolve_connection_settings, resolve_login_settings, resolve_usg_account_file, resolve_usg_connection_settings, validate_connection_settings, validate_login_settings, validate_usg_connection_settings
 from .af_client import AFClientError, keepalive, login, logout
 from .app_config import DEFAULT_CONFIRM_MODE, DEFAULT_WHITELIST_FILE
 from .audit_log import append_audit_log
@@ -122,6 +122,74 @@ def register_auth_tools(mcp: Any) -> None:
     )
     def account_config_status() -> dict[str, Any]:
         return get_account_defaults()
+
+    @mcp.tool(
+        name="set_usg_connection",
+        description="通过聊天输入并持久化 USG6000F 连接账号；USG 使用 Basic Auth，不建立独立登录会话。",
+    )
+    def set_usg_connection(
+        usg_host: str,
+        usg_username: str,
+        usg_password: str,
+        usg_port: str = "443",
+        usg_verify_ssl: bool = False,
+    ) -> dict[str, Any]:
+        try:
+            settings = resolve_usg_connection_settings(
+                host=usg_host,
+                port=usg_port,
+                username=usg_username,
+                password=usg_password,
+                verify_ssl=usg_verify_ssl,
+            )
+            validate_usg_connection_settings(settings)
+            os.environ["USG_HOST"] = settings["host"]
+            os.environ["USG_PORT"] = settings["port"]
+            os.environ["USG_USERNAME"] = settings["username"]
+            os.environ["USG_PASSWORD"] = settings["password"]
+            os.environ["USG_VERIFY_SSL"] = "true" if settings["verify_ssl"] else "false"
+            persistence = persist_usg_connection_settings(
+                host=settings["host"],
+                port=settings["port"],
+                username=settings["username"],
+                password=settings["password"],
+                verify_ssl=settings["verify_ssl"],
+            )
+            result = {
+                "success": True,
+                "host": settings["host"],
+                "port": settings["port"],
+                "username": settings["username"],
+                "passwordConfigured": True,
+                "verifySsl": settings["verify_ssl"],
+                "authMode": "basic-auth-per-request",
+                "loginRequired": False,
+                "accountFile": resolve_usg_account_file(),
+                "persisted": True,
+                "message": "USG 连接账号已保存，后续可直接在聊天中执行 USG 工具，无需单独登录。",
+            }
+            append_audit_log("set_usg_connection", {"success": True, "host": settings["host"], "username": settings["username"], "persisted": persistence, "result": result})
+            return result
+        except ValueError as error:
+            return _config_error_result("set_usg_connection", error, {"usg_host": usg_host, "usg_username": usg_username, "usg_port": usg_port})
+
+    @mcp.tool(
+        name="clear_usg_connection",
+        description="清空通过聊天保存的 USG 连接账号，后续需重新调用 set_usg_connection。",
+    )
+    def clear_usg_connection() -> dict[str, Any]:
+        cleared = clear_persisted_usg_connection_settings()
+        for env_name in ("USG_HOST", "USG_PORT", "USG_USERNAME", "USG_PASSWORD", "USG_VERIFY_SSL"):
+            os.environ.pop(env_name, None)
+        result = {
+            "success": True,
+            "cleared": True,
+            "existed": cleared["existed"],
+            "accountFile": cleared["accountFile"],
+            "message": "USG 聊天配置已清空，后续如需执行 USG 工具，请重新调用 set_usg_connection。",
+        }
+        append_audit_log("clear_usg_connection", {"success": True, "result": result})
+        return result
 
     @mcp.tool(
         name="get_confirm_mode",

@@ -1,13 +1,17 @@
 # 设备联动封禁智能体
 
-这是一个基于 FastMCP 最新版本构建的 AiPy 扩展脚手架，用于后续接入 AF 设备联动封禁能力。
+这是一个基于 FastMCP 最新版本构建的设备联动封禁智能体，当前在同一个 MCP 服务中同时接入 AF 与华为 USG6000F 两条处置链路。
+
+重要约束：AF 和 USG6000F 属于两台不同设备，只是被统一收敛到同一个 MCP 服务中。配置、认证、协议和下发目标都必须按两台设备分别处理，不能把 AF_HOST 和 USG_HOST 视为同一个地址。
 
 ## 项目结构
 
 - `device_block_agent/`：核心 Python 源码与 MCP 工具实现。
+- `config/`：正式白名单与双设备配置参考。
 - `docs/`：API 整理文档、方案文档与原始 PDF。
 - `assets/`：图标等静态资源。
 - `examples/`：白名单样例和参考素材。
+- `usg6000f-mcp/`：原 USG 独立 MCP 参考实现，当前关键能力已合并进主 MCP。
 - 根目录：保留 `main.py`、`manifest.json`、`requirements.txt`、`README.md` 等项目入口文件。
 
 ## 当前状态
@@ -23,6 +27,8 @@
 - 已支持通过本地 JSON 文件持久化登录会话，用于跨进程复用登录态。
 - 已支持本地会话超时判断与临近过期自动 keepalive。
 - 已支持默认 AF 账号与连接配置，认证和封禁工具可直接复用。
+- 已将 USG6000F 黑名单预览、下发、解封、五层白名单与动作快照并入同一 MCP 服务。
+- AF 与 USG6000F 作为两台独立设备分别配置和下发，只共享 MCP 入口，不共享设备连接参数。
 - 已提供最小工具 `agent_info`，用于验证 AiPy 到 MCP 服务的发现链路。
 - 已接入首版业务级回检策略，`block_clear_attackers` 已升级为前后基线对比判定。
 
@@ -69,7 +75,19 @@
 2. `af_namespace` 用于配置默认命名空间，默认 `public`。
 3. `af_username` 和 `af_password` 用于配置默认登录账号。
 4. `af_verify_tls` 用于配置默认 HTTPS 证书校验开关。
-5. 配置完成后，`auth_login`、`auth_keepalive`、`auth_logout` 以及封禁相关工具都可直接复用这些默认值。
+5. USG 连接账号不再通过 manifest 默认配置；应先在聊天中调用 `set_usg_connection` 录入 `usg_host`、`usg_port`、`usg_username`、`usg_password`、`usg_verify_ssl`。
+6. `usg_whitelist_path` 用于指定 USG 五层白名单 YAML，默认是 [config/usg-whitelist.yaml](config/usg-whitelist.yaml)。
+7. `usg_action_dir` 用于指定 USG 黑名单动作快照与回滚目录。
+8. AF 与 USG 的配置是分开的：AF 工具可复用 manifest 中的 AF 默认值，USG 工具优先复用聊天中通过 `set_usg_connection` 保存的配置。
+9. 即使在同一条处置流程中同时使用 AF 和 USG，也应将其理解为“同一智能体协调两台设备”，而不是“同一台设备上的两类接口”。
+
+## 设备边界
+
+1. AF 工具只会访问 `af_host` 对应的 AF 设备接口。
+2. USG 工具只会访问 `usg_host` 对应的 USG6000F RESTCONF 接口。
+3. 当前仓库把两条能力合并进一个 MCP，是为了统一编排、统一风控和统一审计，不表示 AF 与 USG 是同一台设备。
+4. 本地模拟测试平台可以在同一个进程里同时暴露 AF 和 USG mock 路由，但这只是联调便利，不代表生产拓扑。
+5. 主 MCP 中 USG 不再从 manifest 读取默认连接账号，标准做法是在聊天中先调用 `set_usg_connection`。
 
 ## 当前已实现工具
 
@@ -78,31 +96,46 @@
 3. `auth_keepalive`
 4. `auth_logout`
 5. `account_config_status`
-6. `get_confirm_mode`
-7. `set_confirm_mode`
-8. `get_whitelist_config`
-9. `get_whitelist_rules`
-10. `set_whitelist_file`
-11. `check_whitelist_targets`
-12. `block_list_exceptions`
-13. `block_add_exceptions`
-14. `block_delete_exceptions`
-15. `block_update_exceptions`
-16. `block_update_exception`
-17. `block_list_attackers`
-18. `block_list_temp`
-19. `block_list_business`
-20. `block_get_total_count`
-21. `block_get_block_time`
-22. `block_add_attackers`
-23. `block_delete_attackers`
-24. `block_add_business`
-25. `block_delete_temp`
-26. `block_delete_business`
-27. `block_clear_attackers`
-28. `block_clear_temp`
-29. `block_clear_business`
-30. `block_set_block_time`
+6. `set_usg_connection`
+7. `clear_usg_connection`
+8. `get_confirm_mode`
+9. `set_confirm_mode`
+10. `get_whitelist_config`
+11. `get_whitelist_rules`
+12. `set_whitelist_file`
+13. `check_whitelist_targets`
+14. `block_list_exceptions`
+15. `block_add_exceptions`
+16. `block_delete_exceptions`
+17. `block_update_exceptions`
+18. `block_update_exception`
+19. `block_list_attackers`
+20. `block_list_temp`
+21. `block_list_business`
+22. `block_get_total_count`
+23. `block_get_block_time`
+24. `block_add_attackers`
+25. `block_delete_attackers`
+26. `block_add_business`
+27. `block_delete_temp`
+28. `block_delete_business`
+29. `block_clear_attackers`
+30. `block_clear_temp`
+31. `block_clear_business`
+32. `block_set_block_time`
+33. `usg_connection_status`
+34. `usg_get_blacklist`
+35. `usg_preview_blacklist_add`
+36. `usg_apply_blacklist_add`
+37. `usg_whitelist_check`
+38. `usg_whitelist_reload`
+39. `usg_whitelist_list`
+40. `usg_whitelist_stats`
+41. `usg_preview_blacklist_unblock`
+42. `usg_apply_blacklist_unblock`
+43. `usg_list_actions`
+44. `usg_get_action_detail`
+45. `usg_unblock_recent`
 
 ## 下一步实现
 
